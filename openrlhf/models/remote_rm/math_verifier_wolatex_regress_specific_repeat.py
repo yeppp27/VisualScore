@@ -1,0 +1,606 @@
+import json
+import os
+import random
+import re
+import math
+from argparse import ArgumentParser
+from multiprocessing import Process, Queue
+
+import Levenshtein
+from flask import Flask, jsonify, request
+from latex2sympy2_extended import NormalizationConfig
+from math_verify import LatexExtractionConfig, parse, verify
+from flask import Flask, jsonify, request, g
+from loguru import logger
+from concurrent import futures
+app = Flask(__name__)
+
+problem_to_answer = {}
+
+import math
+from collections import Counter
+
+def calculate_ngram_repetition_ratio(text, n=3):
+    tokens = text.split()
+    if len(tokens) < n:
+        return 0.0  # no repeat
+    ngrams = [tuple(tokens[i:i+n]) for i in range(len(tokens)-n+1)]
+    total = len(ngrams)
+    freq = Counter(ngrams)
+    repeated = sum([count for count in freq.values() if count > 1])
+    repetition_ratio = repeated / total
+    return repetition_ratio
+
+def sentence_repeat_ratio(text):
+    sentences = [s.strip() for s in re.split(r'[\.\n]+', text) if s.strip()]
+    total = len(sentences)
+    freq = Counter(sentences)
+    repeated = sum([count for count in freq.values() if count > 1])
+    return repeated / total if total > 0 else 0.0
+
+import re
+from collections import Counter
+
+def sentence_repeat_ratio_fuzzy(text, n=3):
+    """
+    Detect text repetition rate, robust to line breaks and spaces
+    
+    Args:
+        text (str): input
+        n (int): n-gram
+    
+    Returns:
+        float: repetition rate 0.0-1.0
+    """
+    if not text or len(text.strip()) == 0:
+        return 0.0
+    
+    # Clean text: uniformly handle various line breaks and spaces
+    # Replace all line breaks, tabs, and multiple spaces with single spaces
+    cleaned_text = re.sub(r'[\r\n\t\f\v]+', ' ', text)  # line breaks -> spaces
+    cleaned_text = re.sub(r'\s+', ' ', cleaned_text)     # multiple spaces -> single space
+    cleaned_text = cleaned_text.strip()
+    
+    if len(cleaned_text) < 10:  # text too short
+        return 0.0
+    
+    # Method 1: detect repetition by sentence segmentation
+    sentences = re.split(r'[.!?。！？]+', cleaned_text)
+    sentences = [s.strip() for s in sentences if s.strip() and len(s.strip()) > 3]
+    
+    sentence_repetition = 0.0
+    if len(sentences) > 1:
+        sentence_counts = Counter(sentences)
+        total_sentences = len(sentences)
+        repeated_sentences = sum(count - 1 for count in sentence_counts.values() if count > 1)
+        sentence_repetition = repeated_sentences / total_sentences
+    
+    # Method 2: detect repeated phrases
+    words = cleaned_text.lower().split()
+    if len(words) < n:
+        return sentence_repetition
+    
+    # Generate n-grams
+    ngrams = []
+    for i in range(len(words) - n + 1):
+        ngram = ' '.join(words[i:i+n])
+        ngrams.append(ngram)
+    
+    ngram_counts = Counter(ngrams)
+    total_ngrams = len(ngrams)
+    repeated_ngrams = sum(count - 1 for count in ngram_counts.values() if count > 1)
+    ngram_repetition = repeated_ngrams / total_ngrams if total_ngrams > 0 else 0.0
+    
+    # Method 3: detect repeated long segments
+    chunk_repetition = 0.0
+    chunk_size = 50  # 50 characters per chunk
+    if len(cleaned_text) > chunk_size:
+        chunks = []
+        for i in range(0, len(cleaned_text) - chunk_size + 1, 10):  # move every 10 characters
+            chunk = cleaned_text[i:i+chunk_size]
+            chunks.append(chunk)
+        
+        chunk_counts = Counter(chunks)
+        total_chunks = len(chunks)
+        repeated_chunks = sum(count - 1 for count in chunk_counts.values() if count > 1)
+        chunk_repetition = repeated_chunks / total_chunks if total_chunks > 0 else 0.0
+    
+    # Combine results from three methods
+    final_repetition = max(sentence_repetition, ngram_repetition, chunk_repetition)
+    
+    return min(final_repetition, 1.0)
+
+from difflib import SequenceMatcher
+from collections import Counter
+import re
+
+
+
+class RewardCalculator:
+    def __init__(self, initial_sigma=1.0, initial_epsilon_bonus=0.3, max_possible_error=None, 
+                 enable_dataset_specific=False, dataset_adjustments=None):
+        """
+        Initializes the RewardCalculator.
+
+        Args:
+            initial_sigma (float): Initial value for sigma in Gaussian RBF reward.
+                                   This can be annealed during curriculum learning.
+            initial_epsilon_bonus (float): Initial epsilon for binary rewards or bonus thresholds.
+                                           This can be annealed during curriculum learning.
+            max_possible_error (float, optional): The maximum possible absolute error.
+                                                  Used for 'bounded_reward'.
+                                                  Can be a dictionary mapping dataset_name to value.
+            enable_dataset_specific (bool): Whether to enable dataset-specific parameter adjustments.
+            dataset_adjustments (dict): Dictionary containing dataset-specific multipliers.
+        """
+        self.initial_sigma = initial_sigma
+        self.initial_epsilon_bonus = initial_epsilon_bonus
+        
+        self.current_sigma = initial_sigma
+        self.current_epsilon_bonus = initial_epsilon_bonus
+        
+        self.max_possible_error = max_possible_error 
+        self.training_step = 0 # Represents current training iteration, step, or epoch
+        
+        # Dataset-specific adjustments
+        self.enable_dataset_specific = enable_dataset_specific
+        self.dataset_adjustments = dataset_adjustments or {}
+
+    def _detect_dataset_from_problem(self, problem):
+        """
+        Detect dataset type from problem string.
+        
+        Args:
+            problem (str): The problem string to analyze.
+            
+        Returns:
+            str: Dataset type ('ava', 'evalmuse', 'koniq', or 'default')
+        """
+        if not problem:
+            return 'default'
+            
+        problem_lower = problem.lower()
+        
+        if 'ava_dataset' in problem_lower:
+            return 'ava'
+        elif 'evalmuse' in problem_lower:
+            return 'evalmuse' 
+        elif 'koniq' in problem_lower:
+            return 'koniq'
+        else:
+            return 'default'
+
+    def _get_dataset_adjusted_parameters(self, problem):
+        """
+        Get dataset-specific adjusted parameters based on problem string.
+        
+        Args:
+            problem (str): The problem string to analyze.
+            
+        Returns:
+            tuple: (adjusted_sigma, adjusted_epsilon_bonus)
+        """
+        if not self.enable_dataset_specific:
+            return self.current_sigma, self.current_epsilon_bonus
+            
+        dataset_type = self._detect_dataset_from_problem(problem)
+        
+        adjusted_sigma = self.current_sigma
+        adjusted_epsilon_bonus = self.current_epsilon_bonus
+        
+        if dataset_type == 'ava':
+            # AVA_dataset: harder task (SRCC ~0.66), use more lenient parameters
+            adjusted_sigma *= self.dataset_adjustments.get('ava_sigma_multiplier', 1.5)
+            adjusted_epsilon_bonus *= self.dataset_adjustments.get('ava_epsilon_multiplier', 1.3)
+        elif dataset_type == 'evalmuse':
+            # Evalmuse: harder task (SRCC ~0.66), use more lenient parameters
+            adjusted_sigma *= self.dataset_adjustments.get('evalmuse_sigma_multiplier', 1.5)
+            adjusted_epsilon_bonus *= self.dataset_adjustments.get('evalmuse_epsilon_multiplier', 1.3)
+        elif dataset_type == 'koniq':
+            # koniq: easier task (SRCC ~0.88), use more strict parameters
+            adjusted_sigma *= self.dataset_adjustments.get('koniq_sigma_multiplier', 0.8)
+            adjusted_epsilon_bonus *= self.dataset_adjustments.get('koniq_epsilon_multiplier', 0.7)
+        
+        return adjusted_sigma, adjusted_epsilon_bonus
+
+    def update_curriculum_parameters(self, current_step_or_epoch, total_steps_or_epochs=None):
+        """
+        Updates curriculum-dependent parameters like sigma or epsilon_bonus.
+        This method should be called periodically during training (e.g., every epoch).
+
+        Args:
+            current_step_or_epoch (int): The current training step or epoch.
+            total_steps_or_epochs (int, optional): Total steps/epochs for linear annealing.
+        """
+        self.training_step = current_step_or_epoch
+
+        # --- Implement your annealing logic here ---
+        # Example: Linearly anneal sigma for Gaussian RBF
+        # min_sigma = 0.1 # Target minimum sigma
+        # if total_steps_or_epochs and total_steps_or_epochs > 0:
+        #     progress = min(1.0, float(current_step_or_epoch) / total_steps_or_epochs)
+        #     self.current_sigma = self.initial_sigma - (self.initial_sigma - min_sigma) * progress
+        #     self.current_sigma = max(self.current_sigma, min_sigma) # Ensure it doesn't go below min
+
+        # Example: Linearly anneal epsilon_bonus for binary/hybrid rewards
+        # min_epsilon = 0.05 # Target minimum epsilon
+        # if total_steps_or_epochs and total_steps_or_epochs > 0:
+        #     progress = min(1.0, float(current_step_or_epoch) / total_steps_or_epochs)
+        #     self.current_epsilon_bonus = self.initial_epsilon_bonus - (self.initial_epsilon_bonus - min_epsilon) * progress
+        #     self.current_epsilon_bonus = max(self.current_epsilon_bonus, min_epsilon)
+
+        # For now, this is a placeholder. You'll need to define how these parameters change.
+        # If no annealing is needed for a particular run, these values will just stay initial.
+        pass
+
+    def get_reward(self, content, sol, reward_type="negative_mae", dataset_name=None, debug_print=False, problem=None):
+        """
+        Calculates the reward based on the predicted content and the ground truth solution.
+
+        Args:
+            content (str): The model's output string, expected to contain <answer>...</answer>.
+            sol (str): The ground truth solution string.
+            reward_type (str): Type of reward to calculate. Options:
+                               - "negative_mae": R = -|Spred - Sgt|
+                               - "negative_mse": R = -(Spred - Sgt)^2
+                               - "gaussian_rbf": R = exp(- (Spred - Sgt)^2 / (2 * sigma^2) )
+                               - "bounded_reward": R = 1 - (|Spred - Sgt| / max_possible_error)
+                               - "original_binary": Your previous binary reward (uses current_epsilon_bonus)
+                               - "hybrid_mae_bonus": Negative MAE + bonus if error < current_epsilon_bonus
+            dataset_name (str, optional): Name or identifier for the dataset,
+                                          can be used for dataset-specific reward adjustments.
+            debug_print (bool): If True, prints debug information.
+            problem (str, optional): The original problem string for dataset detection.
+
+        Returns:
+            float: The calculated reward.
+        """
+        try:
+            match = re.search(r"<answer>(.*?)</answer>", content, re.DOTALL)
+            if not match:
+                if debug_print: print(f"[Error] No <answer>...</answer> found in content: {content[:100]}...")
+                return 0.0 
+            
+            # Extract think process
+            think_match = re.search(r"<think>(.*?)</think>", content, re.DOTALL)
+            if not think_match:
+                if debug_print:
+                    print(f"[Error] No <think>...</think> found in content: {content[:100]}...")
+                return 0.0
+            
+            
+            think_str = think_match.group(1).strip()
+
+            pred_str = match.group(1).strip()
+            gt_str = sol.strip()
+
+            pred_val = float(pred_str)
+            gt_val = float(gt_str)
+
+            error = pred_val - gt_val
+            abs_error = abs(error)
+
+            # --- Get dataset-specific adjusted parameters ---
+            sigma_to_use, epsilon_bonus_to_use = self._get_dataset_adjusted_parameters(problem)
+            
+            # Example of dataset-specific max_possible_error for bounded_reward
+            max_error_for_bounded = self.max_possible_error
+            if isinstance(self.max_possible_error, dict):
+                max_error_for_bounded = self.max_possible_error.get(dataset_name, None) # Fallback to None or a default
+
+            reward = 0.0
+            if reward_type == "negative_mae":
+                # R = -|Spred - Sgt|
+                reward = -abs_error
+            elif reward_type == "negative_mse":
+                # R = -(Spred - Sgt)^2
+                reward = -(error**2)
+            elif reward_type == "gaussian_rbf":
+                # R = exp(- (Spred - Sgt)^2 / (2 * sigma^2) )
+                if sigma_to_use <= 0:
+                    if debug_print: print(f"[Error] Sigma for Gaussian RBF reward must be positive. Got {sigma_to_use}")
+                    return 0.0 
+                reward = math.exp(-(error**2) / (2 * sigma_to_use**2))
+            elif reward_type == "gaussian_with_repeat_penalty":
+                # Gaussian RBF reward (based on prediction error)
+                if sigma_to_use <= 0:
+                    if debug_print: print(f"[Error] Sigma for Gaussian RBF reward must be positive. Got {sigma_to_use}")
+                    return 0.0 
+                gaussian_reward = math.exp(-(error ** 2) / (2 * sigma_to_use ** 2))
+                # Repetition penalty (based on n-gram repetition ratio)
+                ngram_n = 3  # you can change to 2 or 4 if needed
+                repetition_ratio = sentence_repeat_ratio_fuzzy(think_str)#, n=ngram_n)
+                repetition_penalty = 1.0 - repetition_ratio  # higher repetition → lower penalty
+                # Combine
+                reward = gaussian_reward * repetition_penalty
+                # Clamp reward
+                #reward = max(0.0, min(1.0, reward))
+
+                if debug_print:
+                    print(f"Gaussian reward: {gaussian_reward:.4f}")
+                    print(f"{ngram_n}-gram repetition ratio: {repetition_ratio:.4f}")
+                    print(f"Repetition penalty: {repetition_penalty:.4f}")
+                    print(f"Final reward: {reward:.4f}")
+
+            elif reward_type == "bounded_reward":
+                # R = 1 - (|Spred - Sgt| / max_possible_error)
+                if max_error_for_bounded is None or max_error_for_bounded <= 0:
+                    if debug_print: print(f"[Error] max_possible_error for bounded reward is invalid or not provided. Got {max_error_for_bounded}")
+                    return 0.0 
+                reward = 1.0 - (abs_error / max_error_for_bounded)
+                # Optional: clip reward if it can go extensively negative, e.g., reward = max(reward, -1.0)
+            elif reward_type == "original_binary":
+                # Your previous logic: R = 1.0 if diff < epsilon else 0.0
+                # Uses the potentially annealed self.current_epsilon_bonus as epsilon
+                reward = 1.0 if abs_error < epsilon_bonus_to_use else 0.0
+            elif reward_type == "hybrid_mae_bonus":
+                bonus_amount = 0.5 # Example fixed bonus, could also be annealed or dataset-specific
+                current_bonus = 0.0
+                if abs_error < epsilon_bonus_to_use:
+                    current_bonus = bonus_amount
+                reward = -abs_error + current_bonus
+            else:
+                if debug_print: print(f"[Error] Unknown reward type: {reward_type}")
+                return 0.0
+
+            if debug_print:
+                dataset_detected = self._detect_dataset_from_problem(problem) if self.enable_dataset_specific else 'N/A'
+                print(f"----- Debug: Calculating Reward (Dataset: {dataset_name}, Detected: {dataset_detected}, Step: {self.training_step}) -----")
+                print(f"Content: '{content[:50]}...', Sol: '{sol}'")
+                print(f"Pred_val: {pred_val:.4f}, GT_val: {gt_val:.4f}, Abs Error: {abs_error:.4f}")
+                print(f"Reward Type: {reward_type}")
+                print(f"Base Params: (sigma={self.current_sigma:.4f}, eps_bonus={self.current_epsilon_bonus:.4f})")
+                print(f"Adjusted Params: (sigma={sigma_to_use:.4f}, eps_bonus={epsilon_bonus_to_use:.4f})")
+                print(f"Calculated Reward: {reward:.4f}")
+                print("---------------------------------")
+
+            return reward
+
+        except ValueError: # Handle cases where conversion to float fails
+            if debug_print: print(f"[Exception] ValueError: Could not convert pred_str '{pred_str if 'pred_str' in locals() else 'UNKNOWN'}' or gt_str '{gt_str if 'gt_str' in locals() else 'UNKNOWN'}' to float.")
+            return 0.0 
+        except Exception as e:
+            if debug_print: print(f"[Exception] Failed to calculate reward: {e}")
+            return 0.0
+
+
+def get_response_from_query(q: str):
+    ends_of_sentence = ["<|im_end|>", "<｜end▁of▁sentence｜>", "<|endoftext|>"]
+    pos = re.search(response_prefix, q)
+    if pos is None:
+        return None
+    response = q[pos.end() :]
+    for e in ends_of_sentence:
+        response = response.replace(e, "")
+    return response.strip()
+
+
+def verify_format(completion):
+    pattern = (
+        r"^(?=(?:.*<think>){1})(?=(?:.*<\/think>){1})"
+        r"(?=(?:.*<answer>){1})(?=(?:.*<\/answer>){1})"
+        r"(?!.*<think>.*<think>)"
+        r"(?!.*<\/think>.*<\/think>)"
+        r"(?!.*<answer>.*<answer>)"
+        r"(?!.*<\/answer>.*<\/answer>)"
+        r".*<think>(.+?)</think>\s*<answer>.+?</answer>.*$"
+    )
+    matches = re.search(pattern, completion, re.DOTALL)
+    return 0.5 if matches else 0.0
+
+
+def find_similar_problem(problem):
+    max_sim = -1
+    target_problem = None
+    for p in problem_to_answer.keys():
+        sim = Levenshtein.ratio(problem, p)
+        if sim > max_sim:
+            max_sim = sim
+            target_problem = p
+    return target_problem
+
+
+
+def calculate_math_reward(content, sol, reward_calculator, reward_type="original_binary", dataset_name=None, problem=None):
+    debug = random.random() < 0.3  
+    return reward_calculator.get_reward(
+        content=content,
+        sol=sol,
+        reward_type=reward_type,
+        dataset_name=dataset_name,
+        debug_print=debug,
+        problem=problem
+    )
+
+
+@app.route("/get_reward", methods=["POST"])
+def get_reward():
+ 
+    data = request.get_json()
+    g.args = app.config["ARGS"] 
+ 
+    if "query" not in data:
+        return jsonify({"error": "queries field is required"}), 400
+    
+    reward_type = g.args.reward_type
+    dataset_name = data.get("dataset_name", None)
+    
+    rewards = []
+    format_rewards = []
+    acc_rewards_futures = []
+    
+    for q, problem in zip(data["query"], data["prompts"]):
+        if problem is None:
+            return jsonify({"error": f"problem not found from {q}"}), 400
+        if problem not in problem_to_answer:
+            # This should not happen
+            print(f"problem not exists: {problem}")
+            problem = find_similar_problem(problem)
+        answer = problem_to_answer[problem]
+        response = get_response_from_query(q) or q
+        
+        if response is None:
+            return jsonify({"error": f"response not found from {q}"}), 400
+        
+        format_reward = float(verify_format(response)) * 1
+        
+    
+        acc_reward_future = math_verify_executor.submit(
+            calculate_math_reward, 
+            response, 
+            answer, 
+            reward_calculator,
+            reward_type,
+            dataset_name,
+            problem  
+        )
+       
+        do_print = random.randint(1, 20) == 1
+        if do_print:
+            info = f"Query: {q}\n\nProblem: {problem}\n\n Answer: {answer}\n\n Response: {response}\n\n Format Reward: {format_reward}\n\n Acc Reward: {acc_reward_future.result()}\n\n"
+            info = re.sub(r"<\|.*?\|>", "", info)
+            print(info)
+            
+        format_rewards.append(format_reward)
+        acc_rewards_futures.append(acc_reward_future)
+    
+    acc_rewards = [f.result() for f in acc_rewards_futures]
+    rewards = [f + a for f, a in zip(format_rewards, acc_rewards)]
+
+    return jsonify({
+        "rewards": rewards,
+        "format_rewards": format_rewards,
+        "acc_rewards": acc_rewards
+    })
+
+
+@app.route("/update_curriculum", methods=["POST"])
+def update_curriculum():
+ 
+    data = request.get_json()
+    current_step = data.get("current_step", 0)
+    total_steps = data.get("total_steps", None)
+    
+    reward_calculator.update_curriculum_parameters(current_step, total_steps)
+    
+    return jsonify({
+        "success": True,
+        "current_step": current_step,
+        "current_sigma": reward_calculator.current_sigma,
+        "current_epsilon_bonus": reward_calculator.current_epsilon_bonus
+    })
+
+
+if __name__ == "__main__":
+    parser = ArgumentParser()
+    parser.add_argument(
+        "--dataset", type=str, default=None, help="Datasets to use (comma separated)", required=True
+    )
+    parser.add_argument(
+        "--prompt-template", type=str, default=None, help="Prompt template", required=True
+    )
+    parser.add_argument(
+        "--input_key", type=str, default="prompt", help="The key name of prompt."
+    )
+    parser.add_argument("--log_file", type=str, default="remote_rm.log", help="Log file path")
+    parser.add_argument("--port", type=int, default=5003, help="Port to run the reward server on")
+    parser.add_argument("--epsilon", type=float, default=0.5, help="Tolerance for float comparison")
+    
+    # RewardCalculator
+    parser.add_argument("--reward_type", type=str, default="original_binary", 
+                        help="Type of reward to use (negative_mae, negative_mse, gaussian_rbf, bounded_reward, original_binary, hybrid_mae_bonus)")
+    parser.add_argument("--initial_sigma", type=float, default=1.0, 
+                        help="Initial sigma value for Gaussian RBF reward")
+    parser.add_argument("--initial_epsilon_bonus", type=float, default=0.3, 
+                        help="Initial epsilon bonus for binary/hybrid rewards")
+    parser.add_argument("--max_possible_error", type=float, default=None, 
+                        help="Maximum possible error for bounded reward")
+    
+    # Dataset specific adjustment options
+    parser.add_argument("--enable_dataset_specific", action="store_true", 
+                        help="Enable dataset-specific parameter adjustments")
+    parser.add_argument("--ava_sigma_multiplier", type=float, default=1.5, 
+                        help="Sigma multiplier for AVA_dataset (harder task)")
+    parser.add_argument("--ava_epsilon_multiplier", type=float, default=1.3, 
+                        help="Epsilon bonus multiplier for AVA_dataset (harder task)")
+    parser.add_argument("--evalmuse_sigma_multiplier", type=float, default=1.5, 
+                        help="Sigma multiplier for Evalmuse (harder task)")
+    parser.add_argument("--evalmuse_epsilon_multiplier", type=float, default=1.3, 
+                        help="Epsilon bonus multiplier for Evalmuse (harder task)")
+    parser.add_argument("--koniq_sigma_multiplier", type=float, default=0.8, 
+                        help="Sigma multiplier for koniq (easier task)")
+    parser.add_argument("--koniq_epsilon_multiplier", type=float, default=0.7, 
+                        help="Epsilon bonus multiplier for koniq (easier task)")
+
+    args = parser.parse_args()
+    logger.remove()
+    logger.add(args.log_file)
+    app.config["ARGS"] = args  
+    
+    # Initialize RewardCalculator
+    # Use args.epsilon as initial_epsilon_bonus if not separately specified
+    epsilon_bonus = args.initial_epsilon_bonus if hasattr(args, 'initial_epsilon_bonus') else args.epsilon
+    
+    reward_calculator = RewardCalculator(
+        initial_sigma=args.initial_sigma,
+        initial_epsilon_bonus=epsilon_bonus,
+        max_possible_error=args.max_possible_error,
+        enable_dataset_specific=args.enable_dataset_specific,
+        dataset_adjustments={
+            'ava_sigma_multiplier': args.ava_sigma_multiplier,
+            'ava_epsilon_multiplier': args.ava_epsilon_multiplier,
+            'evalmuse_sigma_multiplier': args.evalmuse_sigma_multiplier,
+            'evalmuse_epsilon_multiplier': args.evalmuse_epsilon_multiplier,
+            'koniq_sigma_multiplier': args.koniq_sigma_multiplier,
+            'koniq_epsilon_multiplier': args.koniq_epsilon_multiplier
+        }
+    )
+    
+    # Split dataset paths and load all datasets
+    dataset = []
+    for dataset_path in args.dataset.split(','):
+        dataset_path = dataset_path.strip()
+        if dataset_path.endswith("json"):
+            with open(dataset_path, "r") as f:
+                dataset.extend(json.load(f))
+        elif dataset_path.endswith("jsonl"):
+            with open(dataset_path, "r") as f:
+                dataset.extend([json.loads(l) for l in f.readlines()])
+        else:
+            raise ValueError(f"Unsupported file format for dataset: {dataset_path}")
+
+    format_pattern = r"^<think>(?:(?!</think>).)*</think><answer>(?:(?!</answer>).)*</answer>\Z"
+
+    if args.prompt_template == "chatml":
+        problem_pattern = r"<\|im_start\|>user\n(.*?)<\|im_end\|>"
+        response_prefix = r"<\|im_start\|>assistant\n"
+    elif args.prompt_template == "qwen1":
+        problem_pattern = r"｜User｜>(.*?)<｜Assistant｜>"
+        response_prefix = r"<｜Assistant｜>"
+    elif args.prompt_template == "base":
+        problem_pattern = r"User: (.*?)\n\nAssistant:"
+        response_prefix = r"Assistant: "
+    else:
+        raise ValueError(f"Unknown chat format: {args.prompt_template}")
+    
+    print("load dataset success")
+    for item in dataset:
+        problem = item[args.input_key]
+        answer = item["answer"].strip()
+        problem_to_answer[problem] = answer
+
+    # math_verify can only run in main thread
+    math_verify_executor = futures.ProcessPoolExecutor(max_workers=16)
+
+    print(f"Starting reward server with reward type: {args.reward_type}")
+    print(f"RewardCalculator initialized with sigma={reward_calculator.current_sigma}, epsilon_bonus={reward_calculator.current_epsilon_bonus}")
+    if args.enable_dataset_specific:
+        print("Dataset-specific adjustments enabled:")
+        print(f"  AVA_dataset: sigma×{args.ava_sigma_multiplier}, epsilon×{args.ava_epsilon_multiplier}")
+        print(f"  Evalmuse: sigma×{args.evalmuse_sigma_multiplier}, epsilon×{args.evalmuse_epsilon_multiplier}")  
+        print(f"  koniq: sigma×{args.koniq_sigma_multiplier}, epsilon×{args.koniq_epsilon_multiplier}")
+    else:
+        print("Dataset-specific adjustments disabled")
+    
+    app.run(host="0.0.0.0", port=args.port, debug=False, use_reloader=False)
+    math_verify_executor.shutdown()

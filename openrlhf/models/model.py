@@ -6,14 +6,14 @@ import torch.nn as nn
 from flash_attn.utils.distributed import all_gather
 from peft import LoraConfig, get_peft_model
 from peft.tuners.lora import LoraLayer
-from transformers import AutoConfig, AutoModel, BitsAndBytesConfig
+from transformers import BitsAndBytesConfig
 from transformers.integrations.deepspeed import HfDeepSpeedConfig
 
 from openrlhf.utils.logging_utils import init_logger
 
 from .ring_attn_utils import convert_ring_attn_params, set_hacked_position_ids, clear_hacked_position_ids
 from .utils import reset_position_ids
-from openrlhf.models.lmm_kits.utils import get_generation_cls
+from openrlhf.models.lmm_kits.utils import get_generation_cls, smart_load_config
 
 logger = init_logger(__name__)
 
@@ -29,6 +29,7 @@ def get_llm_for_sequence_regression(
     lora_rank=0,
     lora_alpha=16,
     target_modules=None,
+    exclude_modules=None,
     lora_dropout=0,
     normalize_reward=False,
     use_flash_attention_2=False,
@@ -51,6 +52,7 @@ def get_llm_for_sequence_regression(
         lora_rank (int, optional): Rank for LoRA adaptation. Defaults to 0.
         lora_alpha (int, optional): Alpha parameter for LoRA. Defaults to 16.
         target_modules (list, optional): List of target modules for LoRA. Defaults to None.
+        exclude_modules (list, optional): List of modules to exclude from LoRA. Defaults to None.
         lora_dropout (float, optional): Dropout rate for LoRA layers. Defaults to 0.
         normalize_reward (bool, optional): Normalize reward values. Defaults to False.
         use_flash_attention_2 (bool, optional): Use Flash Attention 2.0. Defaults to False.
@@ -67,7 +69,7 @@ def get_llm_for_sequence_regression(
         model_type == "critic" or model_type == "reward"
     ), f"invalid model_type: {model_type}, should be critic or reward."
 
-    config = AutoConfig.from_pretrained(model_name_or_path, trust_remote_code=True)
+    config = smart_load_config(model_name_or_path)
     config.normalize_reward = normalize_reward
     config._attn_implementation = "flash_attention_2" if use_flash_attention_2 else "eager"
 
@@ -102,7 +104,7 @@ def get_llm_for_sequence_regression(
     model = cls_class.from_pretrained(
         model_name_or_path,
         config=config,
-        trust_remote_code=True,
+        trust_remote_code=False,
         torch_dtype=torch.bfloat16 if bf16 else "auto",
         quantization_config=nf4_config,
         device_map=device_map,
@@ -112,10 +114,15 @@ def get_llm_for_sequence_regression(
     # LoRA
     if lora_rank > 0:
         model.enable_input_require_grads()
+        if isinstance(target_modules, list) and len(target_modules) == 1:
+            target_modules = target_modules[0]
+        if isinstance(exclude_modules, list) and len(exclude_modules) == 1:
+            exclude_modules = exclude_modules[0]
         lora_config = LoraConfig(
             r=lora_rank,
             lora_alpha=lora_alpha,
             target_modules=target_modules,
+            exclude_modules=exclude_modules,
             lora_dropout=lora_dropout,
             bias="none",
         )
@@ -160,7 +167,7 @@ def _get_reward_model(base_llm_model, value_head_prefix="score", packing_samples
     class RewardModel(base_llm_model):
         supports_gradient_checkpointing = True
 
-        def __init__(self, config: AutoConfig):
+        def __init__(self, config):
             super().__init__(config)
 
             self.value_head_prefix = value_head_prefix
@@ -254,7 +261,7 @@ def _get_critic_model(base_llm_model, value_head_prefix="score", packing_samples
     class CriticModel(base_llm_model):
         supports_gradient_checkpointing = True
 
-        def __init__(self, config: AutoConfig):
+        def __init__(self, config):
             super().__init__(config)
 
             self.value_head_prefix = value_head_prefix

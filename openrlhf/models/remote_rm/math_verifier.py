@@ -52,7 +52,7 @@ def find_similar_problem(problem):
     return target_problem
 
 
-def verify_math(content,sol):
+def verify_math_latex(content,sol):
     gold_parsed = parse(
         sol,
         extraction_mode="first_match",
@@ -92,6 +92,91 @@ def verify_math(content,sol):
     return reward
 
 
+def verify_math(content, sol, epsilon):
+    try:
+        # 提取 <answer>...</answer> 中的内容
+        answer_match = re.search(r"<answer>(.*?)</answer>", content, re.DOTALL)
+        if not answer_match:
+            print("No <answer>...</answer> found in content")
+            return 0.0
+
+        raw_answer = answer_match.group(1).strip()
+
+        # fallback 1: 如果没有 $ 包围，就加上 
+        if not (raw_answer.startswith("$") and raw_answer.endswith("$")):
+            raw_answer = f"${raw_answer}$"
+        # fallback 2: 去掉中间多余空格和非法字符（比如中文标点等）
+        raw_answer = raw_answer.replace("\n", "").replace("\r", "").strip()
+
+        gold_parsed = parse(
+            sol,
+            extraction_mode="first_match",
+            extraction_config=[LatexExtractionConfig()],
+        )
+
+        if not gold_parsed:
+            print("Failed to parse gold solution:", sol)
+            return 1.0  # 跳过无法解析的样本
+
+        answer_parsed = parse(
+            raw_answer,
+            extraction_config=[
+                LatexExtractionConfig(
+                    normalization_config=NormalizationConfig(
+                        nits=False,
+                        malformed_operators=False,
+                        basic_latex=True,
+                        equations=True,
+                        boxed=True,
+                        units=True,
+                    ),
+                    boxed_match_priority=0,
+                    try_extract_without_anchor=False,
+                )
+            ],
+            extraction_mode="first_match",
+        )
+        # fallback 3: 如果 answer 无法解析，尝试直接从 LaTeX 里提取数字
+        if not answer_parsed:
+            print("Failed to parse predicted answer via sympy. Try extracting number...")
+            number_match = re.search(r"\$?\s*([0-9.]+)\s*\$?", raw_answer)
+            if number_match:
+                answer_expr = float(number_match.group(1))
+            else:
+                print("No float number found in raw answer:", raw_answer)
+                return 0.0
+        else:
+            answer_obj = answer_parsed[0]
+            answer_expr = answer_obj.expression.evalf() if hasattr(answer_obj, "expression") else float(answer_obj)
+
+
+        #if not answer_parsed:
+        #    print("Failed to parse predicted answer:", content)
+        #    return 0.0
+
+        # 判断是否包含 expression 属性，否则直接取值比较
+        gold_expr = gold_parsed[0].expression.evalf() if hasattr(gold_parsed[0], "expression") else gold_parsed[0]
+        #answer_expr = answer_parsed[0].expression.evalf() if hasattr(answer_parsed[0], "expression") else answer_parsed[0]
+
+        reward = float(1.0 if abs(float(answer_expr) - float(gold_expr)) < epsilon else 0.0)
+
+    except Exception as e:
+        print("Error verifying math latex:", e)
+        reward = 0.0
+
+    return reward
+    
+'''def verify_math(content, sol, epsilon=1e-3):
+    try:
+        pred = float(parse(content)[0].expression.evalf())
+        gt = float(parse(sol)[0].expression.evalf())
+        print('pred:',pred,'gt',gt,'epsilon',epsilon)
+        reward = 1.0 if abs(pred - gt) < epsilon else 0.0
+    except Exception as e:
+        print("Failed to compare float values: ", e)
+        reward = 0.0  # 或 1.0，取决于你是否想跳过错误样例
+    return reward'''
+
 @app.route("/get_reward", methods=["POST"])
 def get_reward():
     # 获取请求中的 JSON 数据
@@ -111,16 +196,18 @@ def get_reward():
             problem = find_similar_problem(problem)
         answer = problem_to_answer[problem]
         response = get_response_from_query(q) or q
+        #print('answer',answer, 'response',response)
         if response is None:
             return jsonify({"error": f"response not found from {q}"}), 400
         format_reward = float(verify_format(response)) * 0.5
-        acc_reward_future = math_verify_executor.submit(verify_math, response, answer)
+        acc_reward_future = math_verify_executor.submit(verify_math, response, answer, args.epsilon)
        
         do_print = random.randint(1, 20) == 1
         if do_print:
             info=f"Query: {q}\n\nProblem: {problem}\n\n Answer: {answer}\n\n Response: {response}\n\n Format Reward: {format_reward}\n\n Acc Reward: {acc_reward_future.result()}\n\n"
             info = re.sub(r"<\|.*?\|>","",info)
             logger.info(info)
+            #print(info)
             
         format_rewards.append(format_reward)
         acc_rewards_futures.append(acc_reward_future)
@@ -142,6 +229,11 @@ if __name__ == "__main__":
         "--input_key", type=str, default="prompt", help="The key name of prompt."
     )
     parser.add_argument("--log_file", type=str, default="remote_rm.log", help="Log file path")
+    
+    parser.add_argument("--port", type=int, default=5003, help="Port to run the reward server on")
+
+    parser.add_argument("--epsilon", type=float, default=0.5, help="Tolerance for float comparison")
+
     args = parser.parse_args()
     logger.remove()
     logger.add(args.log_file)
@@ -183,5 +275,5 @@ if __name__ == "__main__":
     # math_verify can only run in main thread
     math_verify_executor = futures.ProcessPoolExecutor(max_workers=16)
 
-    app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
+    app.run(host="0.0.0.0", port=args.port, debug=False, use_reloader=False)
     math_verify_executor.shutdown()

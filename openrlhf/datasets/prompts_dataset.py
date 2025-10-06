@@ -3,10 +3,23 @@ from tqdm import tqdm
 
 
 def preprocess_data(data, input_template=None, input_key="input", label_key=None, apply_chat_template=None) -> str:
+    print('in preprocess_data',input_template, apply_chat_template )
     if apply_chat_template:
         chat = data[input_key]
         if isinstance(chat, str):
-            chat = [{"role": "user", "content": chat}]
+            chat = []
+            custom_system_prompt = """You are a helpful assistant good at solving math problems with step-by-step reasoning.
+                You should first think about the reasoning process in the mind and then provide the user with the answer.
+                Your answer must be in LaTeX format and wrapped in $...$.
+                The reasoning process and answer are enclosed within <think> </think> and <answer> </answer> tags, respectively.
+
+                For example:
+                <think> Since $1+1=2$, so the answer is $2$. </think><answer> $2$ </answer>
+
+                This means your output should start with <think> and end with </answer>.
+                """
+            chat.append({"role": "system", "content": custom_system_prompt})
+            chat.append([{"role": "user", "content": chat}])
         prompt = apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
     else:
         prompt = data[input_key]

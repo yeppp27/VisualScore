@@ -87,3 +87,6 @@ setup(
     ],
     cmdclass={"bdist_wheel": bdist_wheel},
 )
+
+
+conda env export --no-builds | grep -v "prefix" > environment.yml

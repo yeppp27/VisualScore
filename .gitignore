@@ -1,3 +1,7 @@
+.git
+.git/**
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -141,6 +145,12 @@ docs/.build
 
 # pytorch checkpoint
 *.pt
+*.safetensors
+*/transformers/*
+*/wandb/*
+
+transformers/
+wandb/
 
 core
 */ckpt/*
@@ -152,3 +162,27 @@ core
 ckpts
 data
 !examples/data
+
+# 路径排除
+checkpoints/
+ckpt/
+checkpoint/
+wandb/
+transformers/
+core/
+output/
+data/
+logs/
+__pycache__/
+*.ipynb_checkpoints/
+vl_outputs_8B_rollout16/
+
+
+# IDE 和系统文件
+.vscode/
+.idea/
+.DS_Store
+
+# Tokenizer 文件太大
+**/tokenizer.json
+**/output_0.json

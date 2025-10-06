@@ -7,7 +7,6 @@ flask
 isort
 jsonlines
 loralib
-math-verify==0.5.2
 levenshtein
 optimum
 packaging
@@ -19,7 +18,7 @@ torch==2.5.1
 torchvision
 torchmetrics
 tqdm
-transformers @ git+https://github.com/huggingface/transformers@main
+transformers
 transformers_stream_generator
 wandb
 wheel

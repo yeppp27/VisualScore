@@ -10,6 +10,7 @@ def get_train_ds_config(
     zpg=8,
     grad_accum_dtype=None,
     overlap_comm=False,
+    universal_ckpt=False,
 ):
     device = "cpu" if offload else "none"
     zero_opt_dict = {
@@ -33,6 +34,8 @@ def get_train_ds_config(
     if overlap_comm:
         zero_opt_dict["overlap_comm"] = True
         zero_opt_dict["contiguous_gradients"] = True
+    if stage == 3:
+        zero_opt_dict["reduce_scatter"] = True
 
     return {
         "steps_per_print": 100,
@@ -44,6 +47,9 @@ def get_train_ds_config(
         "prescale_gradients": False,
         "wall_clock_breakdown": False,
         "data_types": {"grad_accum_dtype": grad_accum_dtype},
+        "checkpoint": {
+            "load_universal": universal_ckpt,
+        },
     }
 
 
@@ -54,7 +60,10 @@ def get_eval_ds_config(
 ):
     zero_opt_dict = {
         "stage": stage,
+        "stage3_max_live_parameters": "auto",
+        "stage3_max_reuse_distance": "auto",
         "stage3_param_persistence_threshold": "auto",
+        "stage3_prefetch_bucket_size": "auto",
         "offload_param": {
             "device": "cpu" if offload else "none",
             "pin_memory": True,

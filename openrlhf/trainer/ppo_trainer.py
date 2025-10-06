@@ -130,7 +130,8 @@ class PPOTrainer(ABC):
         self.actor_scheduler = actor_scheduler
         self.critic_scheduler = critic_scheduler
 
-        self.actor_loss_fn = PolicyLoss(eps_clip)
+        #self.actor_loss_fn = PolicyLoss(eps_clip)
+        self.actor_loss_fn = PolicyLoss(eps_clip, self.args.use_dapo, self.args.use_clip_higher,self.args.clip_eps_low,self.args.clip_eps_high,self.args.use_high_entropy, self.args.high_entropy_rho)
         self.critic_loss_fn = ValueLoss(value_clip)
         self.ptx_loss_fn = GPTLMLoss()
 
@@ -359,11 +360,7 @@ class PPOTrainer(ABC):
             # pad seq makes the sequence a multiple of ring_attention_size.
             if self.strategy.ring_attn_group is not None:
                 pad_len, sequences, attention_mask, num_actions, packed_seq_lens = pad_sequences(
-                    sequences, 
-                    attention_mask, 
-                    num_actions, 
-                    packed_seq_lens, 
-                    self.strategy.ring_attn_group
+                    sequences, attention_mask, num_actions, packed_seq_lens, self.strategy.ring_attn_group
                 )
             if self.args.use_kl_loss and experience.base_action_log_probs is not None:
                 base_action_log_probs = torch.cat(experience.base_action_log_probs, dim=0).unsqueeze(0)
@@ -389,7 +386,7 @@ class PPOTrainer(ABC):
             packed_seq_lens=packed_seq_lens,
             visual_inputs=visual_inputs
         )
-        # unpad sequence ensures that pad tokens do not contribute to the loss calculation.
+        '''# unpad sequence ensures that pad tokens do not contribute to the loss calculation.
         if self.strategy.ring_attn_group is not None:
             assert pad_len is not None
             sequences, attention_mask, num_actions, packed_seq_lens, action_log_probs, _, _ = unpad_sequences(
@@ -408,6 +405,43 @@ class PPOTrainer(ABC):
             old_action_log_probs,
             advantages,
             action_mask=experience.action_mask,
+        )'''
+        logits = output.logits # added for high entropy token povit
+
+        batch_size, total_seq_len, vocab_size = output.logits.shape
+        response_len = action_log_probs.shape[1]
+
+        # 获取 response token ids
+        response_token_ids = sequences[:, -response_len:]  # [batch_size, response_len]
+
+        # 获取用于预测 response 的 logits（从前一个 token 的位置开始）
+        response_logits = output.logits[:, -response_len - 1 : -1, :]  # [batch_size, response_len, vocab_size]
+
+
+        # unpad sequence ensures that pad tokens do not contribute to the loss calculation.
+        if self.strategy.ring_attn_group is not None:
+            assert pad_len is not None
+            sequences, attention_mask, num_actions, packed_seq_lens, action_log_probs, _, _, response_logits = unpad_sequences(
+                pad_len=pad_len,
+                sequences=sequences,
+                attention_mask=attention_mask,
+                num_actions=num_actions,
+                packed_seq_lens=packed_seq_lens,
+                action_log_probs=action_log_probs,
+                ring_attn_group=self.strategy.ring_attn_group,
+                logits=response_logits,  # 传入logits added for high entropy token povit
+                
+            )
+        print('logits_shape',logits.shape)
+        print('experience.action_mask',experience.action_mask.shape)
+        print('action_log_probs',action_log_probs.shape)
+        # loss function
+        actor_loss = self.actor_loss_fn(
+            action_log_probs,
+            old_action_log_probs,
+            advantages,
+            action_mask=experience.action_mask,
+            logits=response_logits,  # added for high entropy token povit
         )
 
         if self.args.use_kl_loss:
@@ -456,6 +490,7 @@ class PPOTrainer(ABC):
 
             output = self.actor(inputs, attention_mask=attention_mask, return_output=True)
             ptx_log_probs = output["logits"]
+            print('ptx_log_probs_shape',ptx_log_probs.shape)
 
             # loss function
             ptx_loss = self.ptx_loss_fn(ptx_log_probs, label)
@@ -501,11 +536,7 @@ class PPOTrainer(ABC):
             # pad seq makes the sequence len a multiple of ring_attention_size.
             if self.strategy.ring_attn_group is not None:
                 pad_len, sequences, attention_mask, num_actions, packed_seq_lens = pad_sequences(
-                    sequences, 
-                    attention_mask, 
-                    num_actions, 
-                    packed_seq_lens, 
-                    self.strategy.ring_attn_group
+                    sequences, attention_mask, num_actions, packed_seq_lens, self.strategy.ring_attn_group
                 )
 
         else:
@@ -606,20 +637,4 @@ class PPOTrainer(ABC):
             self._save_checkpoint(args, tag, client_states)
 
     def _save_checkpoint(self, args, tag, client_states):
-        if not self.disable_ds_ckpt:
-            self.strategy.save_ckpt(
-                self.actor.model,
-                os.path.join(args.ckpt_path, "_actor"),
-                tag,
-                args.max_ckpt_num,
-                args.max_ckpt_mem,
-                client_states,
-            )
-            if self.critic is not None:
-                self.strategy.save_ckpt(
-                    self.critic, os.path.join(args.ckpt_path, "_critic"), tag, args.max_ckpt_num, args.max_ckpt_mem
-                )
-
-        if self.save_hf_ckpt:
-            save_path = os.path.join(args.ckpt_path, f"{tag}_hf")
-            self.strategy.save_model(self.actor, self.processor or self.tokenizer, save_path)
+        raise NotImplementedError("This method should be implemented by the subclass.")

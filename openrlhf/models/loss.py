@@ -53,7 +53,7 @@ class GPTLMLoss(nn.Module):
         return loss
 
 
-class PolicyLoss(nn.Module):
+'''class PolicyLoss(nn.Module):
     """
     Policy Loss for PPO
     """
@@ -74,8 +74,172 @@ class PolicyLoss(nn.Module):
         surr2 = ratio.clamp(1 - self.clip_eps, 1 + self.clip_eps) * advantages
         loss = -torch.min(surr1, surr2)
         loss = masked_mean(loss, action_mask, dim=-1).mean()
-        return loss
+        return loss'''
 
+
+'''class PolicyLoss(nn.Module):
+    """
+    Policy Loss for PPO
+    """
+
+    def __init__(self, clip_eps: float = 0.2, use_dapo: bool = False, use_clip_higher: bool = False, clip_eps_low: float = 0.2, clip_eps_high: float=0.28) -> None:
+        super().__init__()
+        self.clip_eps = clip_eps
+        self.use_dapo = use_dapo
+        self.use_clip_higher = use_clip_higher
+        self.clip_eps_low = clip_eps_low
+        self.clip_eps_high = clip_eps_high
+
+    def forward(
+        self,
+        log_probs: torch.Tensor,
+        old_log_probs: torch.Tensor,
+        advantages: torch.Tensor,
+        action_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        c = 3.0
+        ratio = (log_probs - old_log_probs).exp().clamp(max=c)
+        surr1 = ratio * advantages
+        if self.use_clip_higher:
+            #print('self.use_clip_higher',self.use_clip_higher,'ratio.clamp(1 - self.clip_eps_low, 1 + self.clip_eps_high)',ratio.clamp(1 - self.clip_eps_low, 1 + self.clip_eps_high))
+            surr2 = ratio.clamp(1 - self.clip_eps_low, 1 + self.clip_eps_high) * advantages
+        else:
+            surr2 = ratio.clamp(1 - self.clip_eps, 1 + self.clip_eps) * advantages
+        loss = -torch.min(surr1, surr2)
+        if self.use_dapo:
+            loss = masked_mean(loss.reshape(-1), action_mask.reshape(-1))
+        else:
+            loss = masked_mean(loss, action_mask, dim=-1).mean()
+        return loss'''
+
+import torch
+import torch.nn as nn
+from typing import Optional
+
+def masked_mean(tensor, mask, dim=None):
+    """Helper function for masked mean calculation"""
+    if mask is None:
+        return tensor.mean() if dim is None else tensor.mean(dim=dim)
+    else:
+        if dim is None:
+            return (tensor * mask).sum() / mask.sum().clamp(min=1)
+        else:
+            return (tensor * mask).sum(dim=dim) / mask.sum(dim=dim).clamp(min=1)
+
+class PolicyLoss(nn.Module):
+    """
+    
+    Policy Loss for PPO with optional RLVR High-Entropy Token Selection
+    """
+    
+    def __init__(self, 
+                 clip_eps: float = 0.2, 
+                 use_dapo: bool = False, 
+                 use_clip_higher: bool = False, 
+                 clip_eps_low: float = 0.2, 
+                 clip_eps_high: float = 0.28,
+                 use_high_entropy: bool = False,
+                 high_entropy_rho: float = 0.2) -> None:
+        super().__init__()
+        self.clip_eps = clip_eps
+        self.use_dapo = use_dapo
+        self.use_clip_higher = use_clip_higher
+        self.clip_eps_low = clip_eps_low
+        self.clip_eps_high = clip_eps_high
+        self.use_high_entropy = use_high_entropy
+        self.high_entropy_rho = high_entropy_rho
+
+    def forward(self,
+                log_probs: torch.Tensor,
+                old_log_probs: torch.Tensor,
+                advantages: torch.Tensor,
+                action_mask: Optional[torch.Tensor] = None,
+                # Additional parameters for RLVR high-entropy mode
+                logits: Optional[torch.Tensor] = None,
+                use_entropy = False,
+                ) -> torch.Tensor:
+        
+        c = 3.0
+        ratio = (log_probs - old_log_probs).exp().clamp(max=c)
+        surr1 = ratio * advantages
+        
+        if self.use_clip_higher:
+            surr2 = ratio.clamp(1 - self.clip_eps_low, 1 + self.clip_eps_high) * advantages
+        else:
+            surr2 = ratio.clamp(1 - self.clip_eps, 1 + self.clip_eps) * advantages
+            
+        loss = -torch.min(surr1, surr2)
+        
+        # Apply high-entropy token selection if enabled
+        if self.use_high_entropy and use_entropy:
+            if logits is None:
+                raise ValueError("High-entropy mode requires logits parameter")
+            
+            # Calculate entropy for each token position
+            # H_t^i = -sum(p * log(p)) where p is the probability distribution
+            log_prob_dist = torch.log_softmax(logits, dim=-1)
+            prob_dist = torch.softmax(logits, dim=-1)
+            entropy = -torch.sum(prob_dist * log_prob_dist, dim=-1)  # [batch_size, seq_len]
+            
+            batch_size, seq_len = entropy.shape
+            
+            # Calculate high-entropy mask for each sequence in the batch
+            high_entropy_mask = torch.zeros_like(entropy, dtype=torch.bool)
+            
+            # Calculate entropy threshold tau_rho^B for each batch
+            if action_mask is not None:
+                num_valid_tokens = action_mask.sum(dim=-1)
+            else:
+                num_valid_tokens = torch.full((batch_size,), seq_len, device=entropy.device)
+            
+            top_k = torch.ceil(self.high_entropy_rho * num_valid_tokens).long()
+             
+            debug = True
+            if debug:
+                print(f"  high_entropy_rho: {self.high_entropy_rho}")
+                print(f"  num_valid_tokens: {num_valid_tokens.tolist()}")
+                print(f"  top_k: {top_k.tolist()}")
+                print(f"  use_dapo:{self.use_dapo}")
+            
+            for b in range(batch_size):
+                if action_mask is not None:
+                    valid_entropy = entropy[b][action_mask[b]]
+                else:
+                    valid_entropy = entropy[b]
+                    
+                if len(valid_entropy) > 0:
+                    k = min(top_k[b].item(), len(valid_entropy))
+                    if k > 0:
+                        threshold = torch.topk(valid_entropy, k)[0][-1]  # k-th largest value
+                        high_entropy_mask[b] = entropy[b] >= threshold
+            
+            # Apply action mask to high entropy mask
+            if action_mask is not None:
+                high_entropy_mask = high_entropy_mask & action_mask.bool()
+                # Create combined mask for high-entropy filtering
+                combined_mask = high_entropy_mask
+            else:
+                combined_mask = high_entropy_mask
+            
+            if debug:
+                selected_tokens = combined_mask.sum().item()
+                total_tokens = combined_mask.numel()
+                print(f"  Final selected tokens: {selected_tokens}/{total_tokens} ({100*selected_tokens/total_tokens:.1f}%)")
+            
+            # Apply high-entropy mask to loss
+            # This corresponds to the indicator function I[H^i_t >= τ_ρ^B] in Equation (6)
+            if self.use_dapo:
+                loss = masked_mean(loss.reshape(-1), combined_mask.reshape(-1))
+            else:
+                loss = masked_mean(loss, combined_mask, dim=-1).mean()
+        else:
+            # Original behavior when high-entropy is not used
+            if self.use_dapo:
+                loss = masked_mean(loss.reshape(-1), action_mask.reshape(-1) if action_mask is not None else None)
+            else:
+                loss = masked_mean(loss, action_mask, dim=-1).mean()
+        
+        return loss
 
 class ValueLoss(nn.Module):
     """

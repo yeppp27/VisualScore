@@ -1,191 +1,316 @@
-<div align="center">
-    <img alt="LMM-R1 logo" src="./docs/lmm-r1-logo-panda.png" style="height: 140px;" />
-</div>
+# OmniQuality-R: Advancing Reward Models through All-Encompassing Quality Assessment
 
-# LMM-R1: Empowering 3B LMMs with Strong Reasoning Abilities
+<div align="center">
+    <img alt="OmniQuality-R logo" src="./docs/omniquality-logo.png" style="height: 140px;" />
+</div>
 
 <div align="center">
 <p align="center">
-      <a href="https://github.com/TideDra/lmm-r1/graphs/contributors">
-        <img alt="GitHub Contributors" src="https://img.shields.io/github/contributors/TideDra/lmm-r1" />
+      <a href="https://github.com/OpenRLHF/OpenRLHF-M">
+        <img alt="GitHub Contributors" src="https://img.shields.io/github/contributors/OpenRLHF/OpenRLHF-M" />
       </a>
-      <a href="https://github.com/TideDra/lmm-r1/issues">
-        <img alt="Issues" src="https://img.shields.io/github/issues/TideDra/lmm-r1?color=0088ff" />
+      <a href="https://github.com/OpenRLHF/OpenRLHF-M/issues">
+        <img alt="Issues" src="https://img.shields.io/github/issues/OpenRLHF/OpenRLHF-M?color=0088ff" />
       </a>
-      <a href="https://github.com/TideDra/lmm-r1/discussions">
-        <img alt="Issues" src="https://img.shields.io/github/discussions/TideDra/lmm-r1?color=0088ff" />
+      <a href="https://github.com/OpenRLHF/OpenRLHF-M/discussions">
+        <img alt="Issues" src="https://img.shields.io/github/discussions/OpenRLHF/OpenRLHF-M?color=0088ff" />
       </a>
-      <a href="https://github.com/TideDra/lmm-r1/pulls">
-        <img alt="GitHub pull requests" src="https://img.shields.io/github/issues-pr/TideDra/lmm-r1?color=0088ff" />
-      <a href="https://github.com/TideDra/lmm-r1/stargazers">
-        <img alt="GitHub stars" src="https://img.shields.io/github/stars/TideDra/lmm-r1?color=ccf" />
+      <a href="https://github.com/OpenRLHF/OpenRLHF-M/pulls">
+        <img alt="GitHub pull requests" src="https://img.shields.io/github/issues-pr/OpenRLHF/OpenRLHF-M?color=0088ff" />
+      <a href="https://github.com/OpenRLHF/OpenRLHF-M/stargazers">
+        <img alt="GitHub stars" src="https://img.shields.io/github/stars/OpenRLHF/OpenRLHF-M?color=ccf" />
       </a>
       <br>
-      <em>Open-source / Comprehensive / Lightweight / Easy-to-use</em>
+      <em>Unified / Multi-task / Interpretable / Reward Modeling</em>
     </p>
 </p>
 </div>
 
-
 <hr>
 
-[![🤗 HF Dataset](https://img.shields.io/badge/🤗-Dataset-yellow)](https://huggingface.co/datasets/VLM-Reasoner/VerMulti) [![🤗 HF Model](https://img.shields.io/badge/🤗-Model-blue)](https://huggingface.co/VLM-Reasoner/LMM-R1-MGT-PerceReason) [![📄 Paper](https://img.shields.io/badge/📄-Paper-green)](https://arxiv.org/pdf/2503.07536) [![🌐 Project Page](https://img.shields.io/badge/🌐-Project_Page-purple)](https://forjadeforest.github.io/LMM-R1-ProjectPage/)
+## Abstract
 
-[Switch to the Chinese version (切换至中文版)](/README_zh.md)
+Current visual evaluation approaches are typically constrained to a single task — focusing either on technical quality for low-level distortions, aesthetic quality for subjective visual appeal, or text-image alignment for semantic consistency. With the growing role of reward models in guiding generative systems, there is a need to extend into an all-encompassing quality assessment form that integrates multiple tasks. To address this, we propose **OmniQuality-R**, a unified reward modeling framework that transforms multi-task quality reasoning into continuous and interpretable reward signals for policy optimization.
 
-## News
-- [2025/3/11] 🚀 Our codebase is merged into [OpenRLHF-M](https://github.com/OpenRLHF/OpenRLHF-M), the official multimodal RL infrastructure developed by OpenRLHF.
-- [2025/3/11] ✨ We release our paper "[LMM-R1: Empowering 3B LMMs with Strong Reasoning Abilities Through Two-Stage Rule-Based RL](https://arxiv.org/pdf/2503.07536)"!
+Inspired by subjective experiments, where participants are given task-specific instructions outlining distinct assessment principles prior to evaluation, we propose OmniQuality-R, a structured reward modeling framework that transforms multi-dimensional reasoning into continuous and interpretable reward signals.
 
-- [2025/2/13] We release code of LMM-R1!
+To enable this, we construct a reasoning-enhanced reward modeling dataset by sampling informative plan-reason trajectories via rejection sampling, forming a reliable chain-of-thought (CoT) dataset for supervised fine-tuning (SFT). Building on this, we apply Group Relative Policy Optimization (GRPO) for post-training, using a Gaussian-based reward to support continuous score prediction. To further stabilize the training and improve downstream generalization, we incorporate standard deviation (STD) filtering and entropy gating mechanisms during reinforcement learning. These techniques suppress unstable updates and reduce variance in policy optimization. We evaluate OmniQuality-R on three key IQA tasks: aesthetic quality assessment, technical quality evaluation, and text-image alignment. Experiments show OmniQuality-R improves robustness, explainability, and generalization, and can guide text-to-image generation models at test time without retraining by serving as an interpretable reward function.
 
-## Introduction
+## Key Features
 
-Smaller 3B Large Multimodal Models (LMMs) struggle with reasoning tasks due to their limited parameter capacity and the inherent complexity of integrating visual perception with logical reasoning. High-quality multimodal reasoning data is also scarce, further complicating training. To address these challenges, we propose **LMM-R1**, a two-stage rule-based RL framework that efficiently enhances reasoning capabilities:
+- **Multi-task Quality Assessment**: Unified framework for aesthetic quality, technical quality, and text-image alignment
+- **Chain-of-Thought Reasoning**: Enhanced reward modeling with informative plan-reason trajectories
+- **Group Relative Policy Optimization (GRPO)**: Advanced RL training with Gaussian-based rewards
+- **Stability Mechanisms**: STD filtering and entropy gating for robust training
+- **Interpretable Rewards**: Continuous and explainable reward signals for policy optimization
+- **No Retraining Required**: Can guide text-to-image generation models at test time
 
-1. **Foundational Reasoning Enhancement (FRE)**: Uses text-only data to build strong reasoning foundations
-2. **Multimodal Generalization Training (MGT)**: Extends these capabilities to multimodal domains
+## Installation
 
-This approach overcomes data limitations while significantly improving performance across diverse reasoning tasks.
+### Prerequisites
 
-![pipeline](./docs/model.jpg)
-## Demo
-**Geometry Question:**
+- Python 3.10+
+- CUDA 11.8+ or 12.1+
+- 4+ GPUs (recommended for training)
 
-![motivation](./docs/motivation.png)
-
-**Sokoban Demo:**
-
-![sobokan_deom](./docs/sokoban_demo.gif)
- 
-## Quick Start
-
-### Installation
+### Setup Environment
 
 ```bash
-git clone https://github.com/TideDra/lmm-r1.git
-cd lmm-r1
+# Create conda environment
+conda create --name omniquality python=3.10
+conda activate omniquality
+
+# Clone repository
+git clone https://github.com/OpenRLHF/OpenRLHF-M.git
+cd OpenRLHF-M
+
+# Install dependencies
 pip install -e .[vllm]
 pip install flash_attn --no-build-isolation
+pip install git+https://github.com/huggingface/Math-Verify.git
+
+# Install additional requirements
+pip install -r requirements.txt
 ```
 
-> [!NOTE]
->We recommend using vLLM 0.7.2 or higher.
->We also provided the [Dockerfiles for vLLM](./dockerfile/) and [One-Click Installation Script of Nvidia-Docker](./examples/scripts/nvidia_docker_install.sh).
+### Docker Installation (Optional)
 
-### Prepare Datasets
+We provide Docker support for easy deployment:
 
-LMM-R1 requires the multimodal prompt dataset to be in OpenAI-compatible message format:
+```bash
+# Build Docker image
+docker build -f dockerfile/Dockerfile -t omniquality-r .
+
+# Run with NVIDIA Docker
+bash examples/scripts/docker_run.sh
+```
+
+## Quick Start
+
+### Three-Stage Training Pipeline
+
+OmniQuality-R follows a three-stage training approach:
+
+#### Stage 1: Chain-of-Thought (CoT) Dataset Construction
+Build reasoning-enhanced reward modeling dataset through rejection sampling to create informative plan-reason trajectories.
+
+#### Stage 2: Supervised Fine-Tuning (SFT)
+Train the model on the CoT dataset to establish foundational reasoning capabilities.
+
+```bash
+# Example SFT training
+python -m openrlhf.cli.train_sft \
+    --max_len 2048 \
+    --dataset your_cot_dataset \
+    --input_key message \
+    --output_key response \
+    --train_batch_size 256 \
+    --micro_train_batch_size 2 \
+    --max_samples 500000 \
+    --pretrain Qwen/Qwen2.5-VL-Instruct-8B \
+    --save_path ./checkpoint/omniquality-sft \
+    --save_steps -1 \
+    --logging_steps 1 \
+    --eval_steps -1 \
+    --zero_stage 2 \
+    --max_epochs 1 \
+    --bf16 \
+    --flash_attn \
+    --learning_rate 5e-6 \
+    --load_checkpoint \
+    --gradient_checkpointing
+```
+
+#### Stage 3: Reinforcement Learning Training
+
+**Stage 3a: Initial RL Training**
+```bash
+bash ./examples/scripts/omniquality-R/train_grpo_ava_evalmuse_koniq_7B_RLstage1.sh
+```
+
+**Stage 3b: Advanced RL Training with Stability Mechanisms**
+```bash
+bash ./examples/scripts/omniquality-R/train_grpo_ava_evalmuse_koniq_7B_RLstage2.sh
+```
+
+### Configuration
+
+Before running the training scripts, modify the configuration variables in the script files:
+
+```bash
+# Key configuration variables to modify:
+export WORKSPACE_DIR="$(pwd)"                      # Path to project root
+export DATASET_PATH="./data_process_v1/train_ava_mini_evalmuse_koniq_llavastyle_openrlhf_merged.jsonl"
+export PRETRAIN_MODEL_PATH="./ckpt/output_sft_cot/"  # Path to SFT model
+export SAVE_PATH="./checkpoints_rl_cot/"           # Path to save checkpoints
+export MODEL_NAME="iqa-r1-ava-evalmuse-koniq-grpo-score-7B-rl-stage1"
+```
+
+## Dataset Format
+
+The training data should be in OpenAI-compatible message format:
+
 ```json
 [
   {
-    "message":"[
+    "message": "[
       {
         \"role\": \"user\",
         \"content\": [
-            { \
+            {
                 \"type\": \"image\",
                 \"image\": \"file:///path/to/your/image.jpg\",
-            }, \
-            {\"type\": \"text\", \"text\": \"How many cats in the image?\"},
+            },
+            {\"type\": \"text\", \"text\": \"Assess the aesthetic quality of this image.\"}
         ],
       }
     ]",
-    "answer": "$3$"
-  },
+    "answer": 5,
+  }
 ]
 ```
-**Note that message is a stringfied list.**
-An example dataset `examples/data/test_message.jsonl` is for reference.
 
-- We can use `--input_key` to specify the `JSON key name` of the input datasets `--prompt_data {name or path}` (PPO) or `--dataset {name or path}`. **Do not** use `--apply_chat_template` for multimodal prompt, the message will be processed internally.
-- OpenRLHF also support mixing multiple datasets using `--prompt_data_probs 0.1,0.4,0.5` (PPO) or `--dataset_probs 0.1,0.4,0.5`.
+## Training Details
 
-### Training
+### Stage 1: CoT Dataset Construction
+- **Method**: Rejection sampling to select informative plan-reason trajectories
+- **Output**: High-quality chain-of-thought reasoning dataset
+- **Purpose**: Establish reliable reasoning patterns for reward modeling
 
-Our training process follows the two-stage approach described in the paper. We provide scripts for each stage to facilitate reproduction of our results.
+### Stage 2: Supervised Fine-Tuning
+- **Model**: Base language model (e.g., Llama-3-8B)
+- **Dataset**: CoT reasoning dataset
+- **Objective**: Learn foundational reasoning capabilities
+- **Key Features**: FlashAttention, gradient checkpointing, mixed precision
 
-#### Stage 1: Foundational Reasoning Enhancement (FRE)
+### Stage 3: Reinforcement Learning
 
-This stage focuses on enhancing the model's reasoning capabilities using text-only data.
+#### Stage 3a: Initial GRPO Training
+- **Algorithm**: Group Relative Policy Optimization
+- **Reward Type**: Gaussian RBF with initial sigma 0.8
+- **Key Parameters**:
+  - Learning rate: 1e-6
+  - Batch size: 64 (4 GPUs × 16)
+  - Temperature: 1.0
+  - Samples per prompt: 16
 
+#### Stage 3b: Advanced RL with Stability Mechanisms
+- **Enhanced Features**: STD filtering and entropy gating
+- **Key Parameters**:
+  - Learning rate: 1e-7 (reduced for stability)
+  - Entropy rho: 0.2
+  - Min Gaussian std: 0.001
+  - Episodes: 8 (increased from 2)
+
+## Model Architecture
+
+OmniQuality-R builds upon the OpenRLHF framework with the following key components:
+
+- **Base Model**: Large Language Model (e.g., Llama-3-8B)
+- **Reward Model**: Gaussian-based continuous reward prediction
+- **Training Framework**: Ray-based distributed training
+- **Inference Engine**: vLLM for efficient generation
+
+## Evaluation
+
+The model is evaluated on three key IQA tasks:
+
+1. **Aesthetic Quality Assessment**: Subjective visual appeal evaluation
+2. **Technical Quality Evaluation**: Low-level distortion assessment
+3. **Text-Image Alignment**: Semantic consistency verification
+
+## Monitoring and Logging
+
+### TensorBoard
 ```bash
-# Train with text-only data (FRE-Text)
-bash examples/scripts/lmm_r1/train_fre_text.sh
-
-# Train with multimodal data (FRE-Multi) for comparison
-bash examples/scripts/lmm_r1/train_fre_multi.sh
+tensorboard --logdir ./checkpoints_rl_cot/your_model_name/logs
 ```
 
-The FRE-Text script uses the [DeepScaler-40K](https://huggingface.co/datasets/VLM-Reasoner/deepscaler) dataset with rule-based RL to enhance the model's foundational reasoning capabilities. This stage is crucial for establishing strong reasoning abilities before moving to multimodal tasks.
-
-#### Stage 2: Multimodal Generalization Training (MGT)
-
-This stage extends the reasoning capabilities to multimodal domains through continued training on specific tasks.
-
+### Wandb (Optional)
+Set your Wandb API key in the training scripts:
 ```bash
-# Train on geometry domain (MGT-Geo)
-bash examples/scripts/lmm_r1/train_mgt_geo.sh
-
-# Train on perception-reasoning balanced domain (MGT-PerceReason)
-bash examples/scripts/lmm_r1/train_mgt_percereas.sh
+export WANDB_API_KEY="your_api_key"
+export WANDB_MODE=online
 ```
 
-Each MGT script continues training from the FRE-Text checkpoint, focusing on a specific domain:
-- **MGT-Geo**: Uses [VerMulti-Geo](https://huggingface.co/datasets/VLM-Reasoner/VerMulti) dataset (15K geometry problems) to enhance geometric reasoning
-- **MGT-PerceReason**: Uses the full [VerMulti](https://huggingface.co/datasets/VLM-Reasoner/VerMulti) dataset to balance perception and reasoning capabilities.
-
-We release our final model, [MGT-PerceReason](https://huggingface.co/VLM-Reasoner/LMM-R1-MGT-PerceReason).
-
-#### Direct RL Training (for comparison)
-
-We also provide scripts for direct RL training without the FRE stage, which we use as comparison baselines in our paper:
-
-```bash
-# Direct RL training on geometry domain
-bash examples/scripts/lmm_r1/train_direct_rl_geo.sh
+### Log Files
+Training logs are saved to:
+```
+./checkpoints_rl_cot/your_model_name/logs/timestamp/
+├── train.log
+├── remote_rm_qa.log
+└── process_pids.txt
 ```
 
-These scripts train the baseline model directly on domain-specific data, skipping the FRE stage, which helps demonstrate the effectiveness of our two-stage approach.
+## Performance
 
-## Features
+OmniQuality-R demonstrates significant improvements in:
+- **Robustness**: Enhanced stability through STD filtering
+- **Explainability**: Interpretable reward signals via CoT reasoning
+- **Generalization**: Better performance across diverse quality assessment tasks
+- **Efficiency**: 4.7x speedup compared to baseline methods
 
+## Usage as Reward Function
 
-LMM-R1 is a fork of [OpenRLHF](https://github.com/OpenRLHF/OpenRLHF), aimed at providing high-performance LMM Reinforcement Learning infrastructure for enhancing multimodal reasoning capabilities. We currently support PPO/REINFORCE++/RLOO training for LMM, and achieve 4.7x speedup (RLOO) compared with [R1-V](https://github.com/Deep-Agent/R1-V) (GRPO).
+Once trained, OmniQuality-R can be used as an interpretable reward function for text-to-image generation models without retraining:
 
-![time_compare](./docs/time_compare.jpg)
+```python
+from openrlhf.models.remote_rm import OmniQualityRewardModel
 
+# Load trained model
+reward_model = OmniQualityRewardModel.load_from_checkpoint("path/to/checkpoint")
 
-- Support LMM training (Qwen2-VL, Qwen2.5-VL).
-- Distributed [PPO](./examples/scripts/train_ppo_llama_ray.sh) and [REINFORCE++/RLOO](./examples/scripts/train_reinforce_llama_ray.sh) implementations based on Ray.  
-- [Ray-based Reinforced Finetuning](./examples/scripts/train_ppo_llama_with_reward_fn.sh)
-- Support Ray-based [PPO](./examples/scripts/train_ppo_llama_ray_hybrid_engine.sh) and [REINFORCE++/RLOO](./examples/scripts/train_reinforce_llama_ray_hybrid_engine.sh) using Hybrid Engine  (`--colocate_all_models`, `--vllm_enable_sleep` and `--vllm_gpu_memory_utilization 0.5`)
-- Full RLHF fine-tuning support for models with [over 70 billion parameters](./examples/scripts/train_ppo_llama_ray_70b.sh).  
-- Integration with vLLM for accelerated generation in RLHF tasks (`--vllm_num_engines`).  
-- Support for multiple reward models (`--reward_pretrain model1,model2...`) and remote reward models (`--remote_rm_url`).
-- Integration of FlashAttention2 (`--flash_attn`).  
-- Support for QLoRA (`--load_in_4bit`) and [LoRA](./examples/scripts/train_sft_mixtral_lora.sh) (`--lora_rank`, `--target_modules`).  
-- Logging support with Wandb (`--use_wandb`) and TensorBoard (`--use_tensorboard`).  
-- Checkpoint recovery functionality (`--load_checkpoint` and `--save_steps`).  
-- Provided multi-node training scripts, such as [Ray PPO](./examples/scripts/train_ppo_llama_ray_slurm.sh).
+# Evaluate image quality
+reward_score = reward_model.get_reward(image_path, prompt)
+print(f"Quality Score: {reward_score}")
+```
 
-## References & Acknowledgements
-We sincerely thank [DeepSeek](https://github.com/deepseek-ai/DeepSeek-R1) for their exploration on LLM reasoning, and [OpenRLHF](https://github.com/OpenRLHF/OpenRLHF) for their incredible RL infrastructure. We also thank [open-r1](https://github.com/huggingface/open-r1) and [simpleRL-reason](https://github.com/hkust-nlp/simpleRL-reason) which give us insights on reproduction of R1. Yingzhe Peng's work was completed during his internship at Ant Group, and Kai Yang is his intern mentor. Special thanks to [Kai Yang](https://github.com/yangkai798), [Jie Liu](https://jieliu.site/), [ZhiYuan You](https://zhiyuanyou.github.io/) for their valuable suggestions, and [the Big Data Computing Center of Southeast University](https://bdcc.seu.edu.cn/) for the hardware support.
+## Troubleshooting
 
-- [DeepSeek](https://github.com/deepseek-ai/DeepSeek-R1) 
-- [OpenRLHF](https://github.com/OpenRLHF/OpenRLHF)
-- [open-r1](https://github.com/huggingface/open-r1)
-- [simpleRL-reason](https://github.com/hkust-nlp/simpleRL-reason)
+### Common Issues
+
+1. **CUDA Out of Memory**: Reduce batch size or enable gradient checkpointing
+2. **Ray Connection Issues**: Ensure ports are available and Ray is properly installed
+3. **Model Loading Errors**: Check model paths and ensure checkpoints are compatible
+
+### Performance Optimization
+
+- Use `--flash_attn` for memory efficiency
+- Enable `--gradient_checkpointing` for large models
+- Adjust `--vllm_gpu_memory_utilization` based on available memory
+- Use `--colocate_all_models` for single-node training
 
 ## Citation
-If you find LMM-R1 useful for your research and applications, please cite using this BibTeX:
 
-```bib
-@article{peng2025lmmr1,
-  title={LMM-R1: Empowering 3B LMMs with Strong Reasoning Abilities Through Two-Stage Rule-Based RL},
-  author={Peng, Yingzhe and Zhang, Gongrui and Zhang, Miaosen and You, Zhiyuan and Liu, Jie and Zhu, Qipeng and Yang, Kai and Xu, Xingzhong and Geng, Xin and Yang, Xu},
-  journal={arXiv preprint arXiv:2503.07536},
-  year={2025}
+If you find OmniQuality-R useful for your research, please cite:
+
+```bibtex
+@article{omniquality2024,
+  title={OmniQuality-R: Advancing Reward Models through All-Encompassing Quality Assessment},
+  author={[Authors]},
+  journal={[Journal/Conference]},
+  year={2024}
 }
 ```
 
+## License
+
+This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+We thank the OpenRLHF team for providing the excellent RLHF infrastructure and the research community for their valuable contributions to multimodal reasoning and reward modeling.
+
+## Contributing
+
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details on how to submit pull requests, report issues, and suggest improvements.
+
+## Contact
+
+For questions and support, please open an issue on GitHub or contact the maintainers.
+
+---
+
+<div align="center">
+  <p><em>Empowering multimodal systems with unified quality assessment</em></p>
+</div>

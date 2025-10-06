@@ -29,9 +29,10 @@ class LLMRayActor:
         noset_visible_devices = kwargs.pop("noset_visible_devices")
         if kwargs.get("distributed_executor_backend") == "ray":
             # a hack to make the script work.
-            # stop ray from manipulating CUDA_VISIBLE_DEVICES
+            # stop ray from manipulating *_VISIBLE_DEVICES
             # at the top-level when the distributed_executor_backend is ray.
             os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+            os.environ.pop("ROCR_VISIBLE_DEVICES", None)
         elif noset_visible_devices:
             # We need to set CUDA_VISIBLE_DEVICES to the ray assigned GPU
             # when the distributed_executor_backend is not ray and
@@ -121,6 +122,7 @@ def create_vllm_engines(
     shared_pg=None,
     gpu_memory_utilization=None,
     vllm_enable_sleep=False,
+    **engine_kwargs
 ):
     import vllm
 
@@ -179,6 +181,7 @@ def create_vllm_engines(
                 num_gpus=0.2 if use_hybrid_engine else 1,
                 enable_sleep_mode=vllm_enable_sleep,
                 noset_visible_devices=ray_noset_visible_devices(),
+                **engine_kwargs
             )
         )
 

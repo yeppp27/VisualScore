@@ -2,7 +2,7 @@ import os
 from typing import List, Dict
 
 import torch
-from qwen_vl_utils import process_vision_info
+from .visual_utils import process_vision_info
 
 from ..base.data_processor import BaseDataProcessor
 

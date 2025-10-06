@@ -176,7 +176,7 @@ def train(args):
         refs.extend(critic_model.async_init_model_from_pretrained(strategy, args.critic_pretrain, max_steps))
         ray.get(refs)
 
-    # train actor and critic mdoel
+    # train actor and critic model
     refs = actor_model.async_fit_actor_model(
         critic_model, ref_model, reward_models, args.remote_rm_url, reward_fn=reward_fn, vllm_engines=vllm_engines
     )
@@ -259,11 +259,13 @@ if __name__ == "__main__":
     parser.add_argument("--max_ckpt_num", type=int, default=3)
     parser.add_argument("--max_ckpt_mem", type=int, default=1e8)
     parser.add_argument("--load_checkpoint", action="store_true", default=False)
+    parser.add_argument("--universal_ckpt", action="store_true", default=False)
 
     # DeepSpeed
     parser.add_argument("--local_rank", type=int, default=-1, help="local_rank for deepspeed")
     parser.add_argument("--zero_stage", type=int, default=2, help="DeepSpeed ZeRO stage")
     parser.add_argument("--gradient_checkpointing", action="store_true", default=False)
+    parser.add_argument("--torch_compile", action="store_true", default=False)
     parser.add_argument("--bf16", action="store_true", default=False, help="Enable bfloat16")
     ## Make EMA as an optional feature
     parser.add_argument("--enable_ema", action="store_true", help="Enable EMA checkpoint for the model.")
@@ -271,6 +273,7 @@ if __name__ == "__main__":
     parser.add_argument("--adam_offload", action="store_true", default=False, help="Offload Adam Optimizer")
     parser.add_argument("--actor_init_on_gpu", action="store_true", default=False)
     parser.add_argument("--flash_attn", action="store_true", default=False, help="Enable FlashAttention2")
+    parser.add_argument("--use_liger_kernel", action="store_true", default=False, help="Enable Liger Kernel")
     parser.add_argument("--grad_accum_dtype", type=str, default=None, help="Adam grad accum data type")
     parser.add_argument("--overlap_comm", action="store_true", default=False)
     parser.add_argument("--gradient_checkpointing_use_reentrant", action="store_true", default=False)
@@ -290,6 +293,7 @@ if __name__ == "__main__":
     parser.add_argument("--lora_rank", type=int, default=0)
     parser.add_argument("--lora_alpha", type=int, default=16)
     parser.add_argument("--target_modules", type=str, nargs="*", default="all-linear")
+    parser.add_argument("--exclude_modules", type=str, nargs="*", default=None)
     parser.add_argument("--lora_dropout", type=float, default=0)
 
     # PPO
@@ -315,6 +319,12 @@ if __name__ == "__main__":
     parser.add_argument("--top_p", type=float, default=1.0)
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--full_determinism",
+        action="store_true",
+        default=False,
+        help="Enable reproducible behavior during distributed training",
+    )
     parser.add_argument("--freezing_actor_steps", type=int, default=-1, help="Used for critic initialization")
     parser.add_argument(
         "--n_samples_per_prompt", type=int, default=1, help="number of responses for each prompt in generation"
@@ -341,8 +351,7 @@ if __name__ == "__main__":
         help="List of parameter name prefixes to freeze during training"
     )
     parser.add_argument("--drop_maxlen", action="store_true", default=False)
-    parser.add_argument("--max_pixels",type=int,default=640*28*28,help="Max pixels for image")
-    parser.add_argument("--min_pixels",type=int,default=4*28*28,help="Min pixels for image")
+    parser.add_argument("--processor_kwargs",type=str,default=None,help="Processor kwargs. Should be a json string. There are always two keys: min_pixels and max_pixels, which are the minimum and maximum number of pixels for the image. If not provided, the default values are 4*28*28 and 16384*28*28 respectively.")
     # Reinforce
     parser.add_argument(
         "--advantage_estimator",
@@ -417,6 +426,17 @@ if __name__ == "__main__":
     # ModelScope parameters
     parser.add_argument("--use_ms", action="store_true", default=False)
 
+
+    #dapo
+    parser.add_argument("--use_dapo", action="store_true", default=False)
+    parser.add_argument("--use_clip_higher", action="store_true", default=False)
+    parser.add_argument("--clip_eps_low", type=float, default=0.2, help="Upper bound for accuracy")
+    parser.add_argument("--clip_eps_high", type=float, default=0.28, help="Upper bound for accuracy")
+
+    #high entropy token povit
+    parser.add_argument("--use_high_entropy", action="store_true", default=False)
+    parser.add_argument("--high_entropy_rho", type=float, default=0.2, help="povitted ratio for high entropy tokens")
+
     args = parser.parse_args()
 
     if args.advantage_estimator not in ["gae"]:
@@ -463,5 +483,15 @@ if __name__ == "__main__":
 
         # Patch hub to download models from modelscope to speed up.
         patch_hub()
+    
+    if args.processor_kwargs:
+        import json
+        args.processor_kwargs = json.loads(args.processor_kwargs)
+        # We use process_vision_info of qwen_vl_utils to get the image inputs for all model,
+        # To be compatible with Qwen2VLImageProcessor, we always set the min_pixels and max_pixels for the processor
+        args.processor_kwargs["min_pixels"] = args.processor_kwargs.get("min_pixels", 4 * 28 * 28)
+        args.processor_kwargs["max_pixels"] = args.processor_kwargs.get("max_pixels", 16384 * 28 * 28)
+    else:
+        args.processor_kwargs = {"min_pixels": 4 * 28 * 28, "max_pixels": 16384 * 28 * 28}
 
     train(args)

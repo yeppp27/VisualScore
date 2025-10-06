@@ -197,6 +197,8 @@ class NaiveReplayBuffer(ABC):
         self.items: List[BufferItem] = []
         self.maxlen = maxlen
         self.drop_maxlen = drop_maxlen
+        #self.store_extra_buffers = store_extra_buffers
+        self.extra_buffers: List[BufferItem] = []
 
     @torch.no_grad()
     def append(self, experience: Experience) -> None:
@@ -269,3 +271,18 @@ class NaiveReplayBuffer(ABC):
 
         for i, item in enumerate(self):
             setattr(item, attribute, (items[i] - mean) * rstd + 1e-8)
+
+    def set_limit(self, limit: int) -> None:
+        self.limit = limit
+    
+    def full(self) -> bool:
+        return len(self.items) >= self.limit
+
+    def is_full(self):
+        curr_len = len(self.items)
+        all_len: list[int] = [None] * dist.get_world_size()
+        dist.all_gather_object(all_len, curr_len)
+        return min(all_len) >= self.expected_len
+
+    def flush(self):
+        self.items = self.items[self.expected_len :]

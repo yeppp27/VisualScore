@@ -1,0 +1,35 @@
+# 
+*.pt
+*.safetensors
+*.ckpt
+*.log
+*.out
+*.tmp
+*.zip
+
+# 
+checkpoints/
+ckpt/
+checkpoint/
+wandb/
+transformers/
+core/
+output/
+data/
+logs/
+__pycache__/
+*.ipynb_checkpoints/
+
+# IDE 
+.vscode/
+.idea/
+.DS_Store
+
+# Tokenizer 
+**/tokenizer.json
+
+# python 
+.env
+.venv
+env/
+venv/

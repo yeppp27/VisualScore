@@ -6,13 +6,13 @@ import torch.nn as nn
 from torch.nn import functional as F
 from peft import LoraConfig, TaskType, get_peft_model
 from peft.tuners.lora import LoraLayer
-from transformers import BitsAndBytesConfig, AutoConfig
+from transformers import BitsAndBytesConfig
 from transformers.integrations.deepspeed import HfDeepSpeedConfig
 from flash_attn.utils.distributed import all_gather
 
 from .ring_attn_utils import convert_ring_attn_params, set_hacked_position_ids, clear_hacked_position_ids
 from .utils import log_probs_from_logits, reset_position_ids
-from openrlhf.models.lmm_kits.utils import get_generation_cls
+from openrlhf.models.lmm_kits.utils import get_generation_cls, hack_peft_model, smart_load_config
 
 
 class Actor(nn.Module):
@@ -30,9 +30,12 @@ class Actor(nn.Module):
         lora_alpha (int, optional): Alpha parameter for LoRA. Defaults to 16.
         lora_dropout (float, optional): Dropout rate for LoRA layers. Defaults to 0.
         target_modules (list, optional): List of target modules for applying LoRA. Defaults to None.
+        exclude_modules (list, optional): List of modules to exclude from LoRA adaptation. Defaults to None.
         ds_config (dict, optional): Configuration for DeepSpeed, enabling model partitioning across multiple GPUs. Defaults to None.
         device_map (dict, optional): Device mapping for loading the model onto specific devices. Defaults to None.
         packing_samples (bool, optional): Whether to pack samples during training. Defaults to False.
+        temperature (float, optional): Temperature for action selection. Defaults to 1.0.
+        use_liger_kernel (bool, optional): Whether to use Liger Kernel for the model. Defaults to False.
     """
 
     def __init__(
@@ -45,12 +48,16 @@ class Actor(nn.Module):
         lora_alpha=16,
         lora_dropout=0,
         target_modules=None,
+        exclude_modules=None,
         ds_config=None,
         device_map=None,
         packing_samples=False,
+        temperature=1.0,
+        use_liger_kernel=False,
         **kwargs,
     ) -> None:
         super().__init__()
+        self.temperature = temperature
 
         if isinstance(pretrain_or_model, str):
             attn_implementation = "flash_attention_2" if use_flash_attention_2 else "eager"
@@ -74,11 +81,11 @@ class Actor(nn.Module):
                 nf4_config = None
 
             #There is no AutoModelForConditionalGeneration in transformers. We manually implement it.
-            config = AutoConfig.from_pretrained(pretrain_or_model)
-            model_cls = get_generation_cls(config)
+            config = smart_load_config(pretrain_or_model)
+            model_cls = get_generation_cls(config, use_liger_kernel=use_liger_kernel)
             self.model = model_cls.from_pretrained(
                 pretrain_or_model,
-                trust_remote_code=True,
+                trust_remote_code=False,
                 attn_implementation=attn_implementation,
                 quantization_config=nf4_config,
                 torch_dtype=torch.bfloat16 if bf16 else "auto",
@@ -89,15 +96,22 @@ class Actor(nn.Module):
             if lora_rank > 0:
                 # https://github.com/huggingface/peft/issues/137
                 self.model.enable_input_require_grads()
+                if isinstance(target_modules, list) and len(target_modules) == 1:
+                    target_modules = target_modules[0]
+                if isinstance(exclude_modules, list) and len(exclude_modules) == 1:
+                    exclude_modules = exclude_modules[0]
                 lora_config = LoraConfig(
                     task_type=TaskType.CAUSAL_LM,
                     r=lora_rank,
                     lora_alpha=lora_alpha,
                     target_modules=target_modules,
+                    exclude_modules=exclude_modules,
                     lora_dropout=lora_dropout,
                     bias="none",
                 )
-                self.model = get_peft_model(self.model, lora_config)
+                peft_model = get_peft_model(self.model, lora_config)
+                peft_model = hack_peft_model(peft_model)
+                self.model = peft_model
 
                 if load_in_4bit:
                     for name, module in self.model.named_modules():
@@ -238,7 +252,9 @@ class Actor(nn.Module):
             return output
 
         if not self.packing_samples:
-            log_probs = log_probs_from_logits(output["logits"][:, :-1, :], sequences[:, 1:])
+            log_probs = log_probs_from_logits(
+                output["logits"][:, :-1, :], sequences[:, 1:], temperature=self.temperature
+            )
             action_log_probs = log_probs[:, -num_actions:]
         else:
             if ring_attn_group is not None and logps_allgather:
@@ -251,13 +267,18 @@ class Actor(nn.Module):
                 if rank == ring_attn_size - 1:
                     # add a dummy label to the last logit
                     local_label = F.pad(local_label, (0, 1), value=0)
+                logits = output["logits"]
+                if self.temperature != 1.0:
+                    logits = logits.div(self.temperature)
                 local_per_token_logps = torch.gather(
-                    output["logits"].log_softmax(-1), dim=2, index=local_label.unsqueeze(2)
+                    logits.log_softmax(-1), dim=2, index=local_label.unsqueeze(2)
                 ).squeeze(2)
                 per_token_logps = all_gather(local_per_token_logps, ring_attn_group).reshape((1, -1))
                 log_probs = per_token_logps[:, :-1]
             else:
-                log_probs = log_probs_from_logits(output["logits"][:, :-1, :], sequences[:, 1:])
+                log_probs = log_probs_from_logits(
+                    output["logits"][:, :-1, :], sequences[:, 1:], temperature=self.temperature
+                )
 
             assert isinstance(num_actions, list) and len(num_actions) == len(packed_seq_lens)
             action_log_probs = []

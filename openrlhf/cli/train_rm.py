@@ -27,6 +27,7 @@ def train(args):
         lora_rank=args.lora_rank,
         lora_alpha=args.lora_alpha,
         target_modules=args.target_modules,
+        exclude_modules=args.exclude_modules,
         lora_dropout=args.lora_dropout,
         ds_config=strategy.get_ds_train_config(is_actor=False),
         init_value_head=True,
@@ -155,11 +156,19 @@ if __name__ == "__main__":
     parser.add_argument("--max_ckpt_num", type=int, default=3)
     parser.add_argument("--max_ckpt_mem", type=int, default=1e8)
     parser.add_argument("--load_checkpoint", action="store_true", default=False)
+    parser.add_argument("--universal_ckpt", action="store_true", default=False)
 
     # DeepSpeed
     parser.add_argument("--max_norm", type=float, default=1.0, help="Gradient clipping")
     parser.add_argument("--gradient_checkpointing", action="store_true", default=False)
+    parser.add_argument("--torch_compile", action="store_true", default=False)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--full_determinism",
+        action="store_true",
+        default=False,
+        help="Enable reproducible behavior during distributed training",
+    )
     parser.add_argument("--local_rank", type=int, default=-1, help="local_rank for deepspeed")
     parser.add_argument("--zero_stage", type=int, default=2, help="DeepSpeed ZeRO stage")
     parser.add_argument("--bf16", action="store_true", default=False, help="Enable bfloat16")
@@ -192,6 +201,7 @@ if __name__ == "__main__":
     parser.add_argument("--lora_alpha", type=int, default=16)
     parser.add_argument("--lora_dropout", type=float, default=0)
     parser.add_argument("--target_modules", type=str, nargs="*", default="all-linear")
+    parser.add_argument("--exclude_modules", type=str, nargs="*", default=None)
 
     # RM training
     parser.add_argument("--max_epochs", type=int, default=1)
