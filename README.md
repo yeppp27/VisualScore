@@ -1,30 +1,7 @@
 # OmniQuality-R: Advancing Reward Models through All-Encompassing Quality Assessment
 
-<div align="center">
-    <img alt="OmniQuality-R logo" src="./docs/omniquality-logo.png" style="height: 140px;" />
-</div>
 
-<div align="center">
-<p align="center">
-      <a href="https://github.com/OpenRLHF/OpenRLHF-M">
-        <img alt="GitHub Contributors" src="https://img.shields.io/github/contributors/OpenRLHF/OpenRLHF-M" />
-      </a>
-      <a href="https://github.com/OpenRLHF/OpenRLHF-M/issues">
-        <img alt="Issues" src="https://img.shields.io/github/issues/OpenRLHF/OpenRLHF-M?color=0088ff" />
-      </a>
-      <a href="https://github.com/OpenRLHF/OpenRLHF-M/discussions">
-        <img alt="Issues" src="https://img.shields.io/github/discussions/OpenRLHF/OpenRLHF-M?color=0088ff" />
-      </a>
-      <a href="https://github.com/OpenRLHF/OpenRLHF-M/pulls">
-        <img alt="GitHub pull requests" src="https://img.shields.io/github/issues-pr/OpenRLHF/OpenRLHF-M?color=0088ff" />
-      <a href="https://github.com/OpenRLHF/OpenRLHF-M/stargazers">
-        <img alt="GitHub stars" src="https://img.shields.io/github/stars/OpenRLHF/OpenRLHF-M?color=ccf" />
-      </a>
-      <br>
-      <em>Unified / Multi-task / Interpretable / Reward Modeling</em>
-    </p>
-</p>
-</div>
+
 
 <hr>
 
@@ -61,8 +38,8 @@ conda create --name omniquality python=3.10
 conda activate omniquality
 
 # Clone repository
-git clone https://github.com/OpenRLHF/OpenRLHF-M.git
-cd OpenRLHF-M
+git clone https://github.com/yeppp27/OmniQuality-R.git
+cd OmniQuality-R
 
 # Install dependencies
 pip install -e .[vllm]
@@ -71,18 +48,6 @@ pip install git+https://github.com/huggingface/Math-Verify.git
 
 # Install additional requirements
 pip install -r requirements.txt
-```
-
-### Docker Installation (Optional)
-
-We provide Docker support for easy deployment:
-
-```bash
-# Build Docker image
-docker build -f dockerfile/Dockerfile -t omniquality-r .
-
-# Run with NVIDIA Docker
-bash examples/scripts/docker_run.sh
 ```
 
 ## Quick Start
@@ -148,12 +113,16 @@ export MODEL_NAME="iqa-r1-ava-evalmuse-koniq-grpo-score-7B-rl-stage1"
 
 ## Dataset Format
 
-The training data should be in OpenAI-compatible message format:
+The training data should be in the following format:
 
 ```json
 [
   {
     "message": "[
+       {
+        \"role\": \"system\",
+        \"content\": \"A conversation between User and Assistant. The user asks a question, and the Assistant solves it. The assistant first thinks about the reasoning process in the mind and then provides the user with the answer. The reasoning process and answer are enclosed within <think> </think> and <answer> </answer> tags, respectively, i.e., <think> reasoning process here </think><answer> answer here </answer>\",
+      },
       {
         \"role\": \"user\",
         \"content\": [
@@ -161,55 +130,16 @@ The training data should be in OpenAI-compatible message format:
                 \"type\": \"image\",
                 \"image\": \"file:///path/to/your/image.jpg\",
             },
-            {\"type\": \"text\", \"text\": \"Assess the aesthetic quality of this image.\"}
+            {\"type\": \"text\", \"text\": \"Check how aligned the image is with this prompt: \\\"A nurse in purple scrubs checks a patient's vitals, her straight blonde hair neatly tied back in a ponytail.\\\"\\n\\nAnd evaluate the image’s alignment rating.\\n\\nGive a final rating for these dimensions from 0 to 5 (float, 2 decimals). A rating of 0 represents very poor level, while 5 represents excellent level.\"}
         ],
       }
     ]",
-    "answer": 5,
+    "answer": "2.971",
   }
 ]
 ```
 
-## Training Details
 
-### Stage 1: CoT Dataset Construction
-- **Method**: Rejection sampling to select informative plan-reason trajectories
-- **Output**: High-quality chain-of-thought reasoning dataset
-- **Purpose**: Establish reliable reasoning patterns for reward modeling
-
-### Stage 2: Supervised Fine-Tuning
-- **Model**: Base language model (e.g., Llama-3-8B)
-- **Dataset**: CoT reasoning dataset
-- **Objective**: Learn foundational reasoning capabilities
-- **Key Features**: FlashAttention, gradient checkpointing, mixed precision
-
-### Stage 3: Reinforcement Learning
-
-#### Stage 3a: Initial GRPO Training
-- **Algorithm**: Group Relative Policy Optimization
-- **Reward Type**: Gaussian RBF with initial sigma 0.8
-- **Key Parameters**:
-  - Learning rate: 1e-6
-  - Batch size: 64 (4 GPUs × 16)
-  - Temperature: 1.0
-  - Samples per prompt: 16
-
-#### Stage 3b: Advanced RL with Stability Mechanisms
-- **Enhanced Features**: STD filtering and entropy gating
-- **Key Parameters**:
-  - Learning rate: 1e-7 (reduced for stability)
-  - Entropy rho: 0.2
-  - Min Gaussian std: 0.001
-  - Episodes: 8 (increased from 2)
-
-## Model Architecture
-
-OmniQuality-R builds upon the OpenRLHF framework with the following key components:
-
-- **Base Model**: Large Language Model (e.g., Llama-3-8B)
-- **Reward Model**: Gaussian-based continuous reward prediction
-- **Training Framework**: Ray-based distributed training
-- **Inference Engine**: vLLM for efficient generation
 
 ## Evaluation
 
@@ -219,66 +149,158 @@ The model is evaluated on three key IQA tasks:
 2. **Technical Quality Evaluation**: Low-level distortion assessment
 3. **Text-Image Alignment**: Semantic consistency verification
 
-## Monitoring and Logging
-
-### TensorBoard
-```bash
-tensorboard --logdir ./checkpoints_rl_cot/your_model_name/logs
-```
-
-### Wandb (Optional)
-Set your Wandb API key in the training scripts:
-```bash
-export WANDB_API_KEY="your_api_key"
-export WANDB_MODE=online
-```
-
-### Log Files
-Training logs are saved to:
-```
-./checkpoints_rl_cot/your_model_name/logs/timestamp/
-├── train.log
-├── remote_rm_qa.log
-└── process_pids.txt
-```
-
-## Performance
-
-OmniQuality-R demonstrates significant improvements in:
-- **Robustness**: Enhanced stability through STD filtering
-- **Explainability**: Interpretable reward signals via CoT reasoning
-- **Generalization**: Better performance across diverse quality assessment tasks
-- **Efficiency**: 4.7x speedup compared to baseline methods
 
 ## Usage as Reward Function
 
 Once trained, OmniQuality-R can be used as an interpretable reward function for text-to-image generation models without retraining:
 
 ```python
-from openrlhf.models.remote_rm import OmniQualityRewardModel
 
-# Load trained model
-reward_model = OmniQualityRewardModel.load_from_checkpoint("path/to/checkpoint")
+import os
+import glob
+import re
+import json
+import argparse
+from collections import defaultdict
+import pandas as pd
+import torch
+from PIL import Image
+import numpy as np
+from contextlib import contextmanager
+import signal
+from transformers import Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLProcessor
+import time
 
-# Evaluate image quality
-reward_score = reward_model.get_reward(image_path, prompt)
-print(f"Quality Score: {reward_score}")
+class QualityRater:
+    def __init__(self, model_path, device):
+        self.device = device
+
+        self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            model_path,
+            device_map=self.device,
+            torch_dtype=torch.bfloat16,
+            attn_implementation="flash_attention_2",
+            low_cpu_mem_usage=True,
+        )
+        self.processor = Qwen2_5_VLProcessor.from_pretrained(
+            model_path,
+            min_pixels=4 * 28 * 28,
+            max_pixels=4000 * 28 * 28
+        )
+
+
+    def load_image(self, image_path):
+        """Load and process image with error handling"""
+        if isinstance(image_path, str):
+            return Image.open(image_path).convert('RGB')
+        else:
+            return image_path.convert('RGB')
+
+    def infer_cot_score(self, image, question ):
+        
+        SYSTEM_PROMPT = (
+            "A conversation between User and Assistant. The user asks a question, and the Assistant solves it. The assistant "
+            "first thinks about the reasoning process in the mind and then provides the user with the answer. The reasoning "
+            "process and answer are enclosed within <think> </think> and <answer> </answer> tags, respectively, i.e., "
+            "<think> reasoning process here </think><answer> answer here </answer>"
+        )
+
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": question},
+                ],
+            },
+        ]
+
+        pixel_values = self.load_image(image)
+        text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+
+        inputs = self.processor(
+            text=[text],
+            images=[pixel_values],
+            padding=True,
+            return_tensors="pt",
+            min_pixels=4 * 28 * 28,
+            max_pixels=4000 * 28 * 28
+        )
+
+        inputs = inputs.to(self.device)
+
+        with torch.no_grad():
+            generation_model = self._get_model_for_generation()
+
+            with timeout_handler(120):
+                output = generation_model.generate(
+                    **inputs,
+                    max_new_tokens=4096,
+                    do_sample=True,
+                    temperature=0.7,
+                    top_p=0.8,
+                    top_k=20,
+                    output_scores=True,
+                    return_dict_in_generate=True
+                )
+
+                generated_ids = output.sequences[:, inputs['input_ids'].shape[1]:]
+                generated_text = self.processor.batch_decode(
+                    generated_ids,
+                    skip_special_tokens=True,
+                    clean_up_tokenization_spaces=True
+                )[0]
+
+                def extract_answer_with_tags(text):
+                    import re
+                    match = re.search(r"<answer>(.*?)</answer>", text, re.DOTALL)
+                    if match:
+                        return match.group(1).strip()
+                    return None
+
+                score = extract_answer_with_tags(generated_text)
+
+                try:
+                    if score is None:
+                        score = generated_text.split("<answer>")[-1]
+                    score = float(score)
+                except (ValueError, TypeError):
+                    score = -1
+
+        return {
+            "value_logit": score,
+            "reason": generated_text,
+        }
+
+    def score_image_dimension(self, image_path, scoring_prompt):
+        """Score a single image for a specific dimension"""
+        try:
+            result, think = self.infer_cot_score(image_path, scoring_prompt)
+            score = result["value_logit"]
+            return score
+        except Exception as e:
+            print(f"Error scoring image {image_path}: {e}")
+            return 0.0
+
+    def score_image_multi_dimension(self, prompt, image_path):
+        """Score a single image on three dimensions"""
+        alignment_prompt_template = 'Judge the image alignment with the prompt: "{}"\nPlease evaluate how well the image matches each element of provided prompt.\n\nAnd answer with the final alignment rating.\nRate it from 0 to 5 (float, 2 decimals). A rating of 0 represents very poor alignment level, while 5 represents excellent alignment level.'
+        technical_prompt = 'Give a techniqual quality score for this picture between 0 and 5 (float, two decimal places). A rating of 0 represents very poor quality, while 5 represents excellent quality.'
+        aesthetic_prompt = 'Provide a float rating between 0 and 5 for the overall aesthetics of this image, rounded to two places. A rating of 0 represents very poor aesthetic quality, while 5 represents excellent aesthetic quality.'
+
+        alignment_prompt = alignment_prompt_template.format(prompt)
+
+        technical_score = self.score_image_dimension(image_path, technical_prompt)
+        aesthetic_score = self.score_image_dimension(image_path, aesthetic_prompt)
+        alignment_score = self.score_image_dimension(image_path, aesthetic_prompt)
+
+        return {
+            'technical': technical_score,
+            'aesthetic': aesthetic_score,
+            'alignment': alignment_score,
+        }
 ```
-
-## Troubleshooting
-
-### Common Issues
-
-1. **CUDA Out of Memory**: Reduce batch size or enable gradient checkpointing
-2. **Ray Connection Issues**: Ensure ports are available and Ray is properly installed
-3. **Model Loading Errors**: Check model paths and ensure checkpoints are compatible
-
-### Performance Optimization
-
-- Use `--flash_attn` for memory efficiency
-- Enable `--gradient_checkpointing` for large models
-- Adjust `--vllm_gpu_memory_utilization` based on available memory
-- Use `--colocate_all_models` for single-node training
 
 ## Citation
 
@@ -288,29 +310,11 @@ If you find OmniQuality-R useful for your research, please cite:
 @article{omniquality2024,
   title={OmniQuality-R: Advancing Reward Models through All-Encompassing Quality Assessment},
   author={[Authors]},
-  journal={[Journal/Conference]},
-  year={2024}
+  year={2025}
 }
 ```
 
-## License
 
-This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
+We thank the OpenRLHF team and lmm-R1 for providing the excellent RLHF infrastructure and the research community for their valuable contributions to multimodal reasoning and reward modeling.
 
-## Acknowledgments
 
-We thank the OpenRLHF team for providing the excellent RLHF infrastructure and the research community for their valuable contributions to multimodal reasoning and reward modeling.
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details on how to submit pull requests, report issues, and suggest improvements.
-
-## Contact
-
-For questions and support, please open an issue on GitHub or contact the maintainers.
-
----
-
-<div align="center">
-  <p><em>Empowering multimodal systems with unified quality assessment</em></p>
-</div>
