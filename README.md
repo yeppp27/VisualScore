@@ -118,25 +118,31 @@ The training data should be in the following format:
 ```json
 [
   {
-    "message": "[
-       {
-        \"role\": \"system\",
-        \"content\": \"A conversation between User and Assistant. The user asks a question, and the Assistant solves it. The assistant first thinks about the reasoning process in the mind and then provides the user with the answer. The reasoning process and answer are enclosed within <think> </think> and <answer> </answer> tags, respectively, i.e., <think> reasoning process here </think><answer> answer here </answer>\",
+    "message": [
+      {
+        "role": "system",
+        "content": "A conversation between User and Assistant. The user asks a question, and the Assistant solves it. The assistant first thinks about the reasoning process in the mind and then provides the user with the answer. The reasoning process and answer are enclosed within <think></think> and <answer></answer> tags, respectively, i.e., <think> reasoning process here </think><answer> answer here </answer>"
       },
       {
-        \"role\": \"user\",
-        \"content\": [
-            {
-                \"type\": \"image\",
-                \"image\": \"file:///path/to/your/image.jpg\",
-            },
-            {\"type\": \"text\", \"text\": \"Check how aligned the image is with this prompt: \\\"A nurse in purple scrubs checks a patient's vitals, her straight blonde hair neatly tied back in a ponytail.\\\"\\n\\nAnd evaluate the image’s alignment rating.\\n\\nGive a final rating for these dimensions from 0 to 5 (float, 2 decimals). A rating of 0 represents very poor level, while 5 represents excellent level.\"}
-        ],
+        "role": "user",
+        "content": [
+          {
+            "type": "image",
+            "image": "file:///path/to/your/image.jpg"
+          },
+          {
+            "type": "text",
+            "text": "Check how aligned the image is with this prompt: \"A nurse in purple scrubs checks a patient's vitals, her straight blonde hair neatly tied back in a ponytail.\"\n\nAnd evaluate the image’s alignment rating.\n\nGive a final rating for these dimensions from 0 to 5 (float, 2 decimals). A rating of 0 represents very poor level, while 5 represents excellent level."
+          }
+        ]
       }
-    ]",
-    "answer": "2.971",
+    ],
+    "answer": "2.971"
   }
 ]
+
+"message": "[{\"role\": \"system\", \"content\": \"A conversation between User and Assistant. The user asks a question, and the Assistant solves it. The assistant first thinks about the reasoning process in the mind and then provides the user with the answer. The reasoning process and answer are enclosed within <think> </think> and <answer> </answer> tags, respectively, i.e., <think> reasoning process here </think><answer> answer here </answer>\"}, {\"role\": \"user\", \"content\": [{\"type\": \"image\", \"image\": \"file:///path/to/your/image.jpg\"}, {\"type\": \"text\", \"text\": \"Check how aligned the image is with this prompt: \\\"A nurse in purple scrubs checks a patient's vitals, her straight blonde hair neatly tied back in a ponytail.\\\"\\n\\nAnd evaluate the image’s alignment rating.\\n\\nGive a final rating for these dimensions from 0 to 5 (float, 2 decimals). A rating of 0 represents very poor level, while 5 represents excellent level\"}]}]", "answer": "2.971"}
+
 ```
 
 
@@ -286,7 +292,7 @@ class QualityRater:
     def score_image_multi_dimension(self, prompt, image_path):
         """Score a single image on three dimensions"""
         alignment_prompt_template = 'Judge the image alignment with the prompt: "{}"\nPlease evaluate how well the image matches each element of provided prompt.\n\nAnd answer with the final alignment rating.\nRate it from 0 to 5 (float, 2 decimals). A rating of 0 represents very poor alignment level, while 5 represents excellent alignment level.'
-        technical_prompt = 'Give a techniqual quality score for this picture between 0 and 5 (float, two decimal places). A rating of 0 represents very poor quality, while 5 represents excellent quality.'
+        technical_prompt = 'Give a technical quality score for this picture between 0 and 5 (float, two decimal places). A rating of 0 represents very poor quality, while 5 represents excellent quality.'
         aesthetic_prompt = 'Provide a float rating between 0 and 5 for the overall aesthetics of this image, rounded to two places. A rating of 0 represents very poor aesthetic quality, while 5 represents excellent aesthetic quality.'
 
         alignment_prompt = alignment_prompt_template.format(prompt)
