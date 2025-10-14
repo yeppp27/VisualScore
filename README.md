@@ -19,10 +19,7 @@ To enable this, we construct a reasoning-enhanced reward modeling dataset by sam
 
 - **Multi-task Quality Assessment**: Unified framework for aesthetic quality, technical quality, and text-image alignment
 - **Chain-of-Thought Reasoning**: Enhanced reward modeling with informative plan-reason trajectories
-- **Group Relative Policy Optimization (GRPO)**: Advanced RL training with Gaussian-based rewards
-- **Stability Mechanisms**: STD filtering and entropy gating for robust training
-- **Interpretable Rewards**: Continuous and explainable reward signals for policy optimization
-- **No Retraining Required**: Can guide text-to-image generation models at test time
+- **Test-Time Guidance**: Can guide text-to-image generation models at test time
 
 ## Model Checkpoints
 
