@@ -5,7 +5,7 @@
 
 <hr>
 
-[![🤗 HF Model](https://img.shields.io/badge/🤗-Model-blue)](https://huggingface.co/yeeeeeyy/OmniQuality-R) [![📄 Paper](https://img.shields.io/badge/📄-Paper-green)](https://arxiv.org/abs/2024.xxxxx) [![🌐 GitHub](https://img.shields.io/badge/🌐-GitHub-purple)](https://github.com/yeppp27/OmniQuality-R)
+[![🤗 HF Model](https://img.shields.io/badge/🤗-Model-blue)](https://huggingface.co/yeeeeeyy/OmniQuality-R) [![📄 Paper](https://img.shields.io/badge/📄-Paper-green)](https://arxiv.org/pdf/2510.10609) [![🌐 GitHub](https://img.shields.io/badge/🌐-GitHub-purple)](https://github.com/yeppp27/OmniQuality-R)
 
 ## Abstract
 
@@ -34,22 +34,6 @@ We provide pre-trained OmniQuality-R models on Hugging Face:
 |-------|------|-------------|----------|
 | **OmniQuality-R** | 8.29B | Pre-trained OmniQuality-R model with Qwen2.5-VL backbone | [![🤗 HF](https://img.shields.io/badge/🤗-Download-blue)](https://huggingface.co/yeeeeeyy/OmniQuality-R) |
 
-### Quick Model Loading
-
-```python
-from transformers import AutoModel, AutoTokenizer
-
-# Load the pre-trained OmniQuality-R model
-model_name = "yeeeeeyy/OmniQuality-R"
-model = AutoModel.from_pretrained(model_name, torch_dtype="auto")
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-# Use as reward function for quality assessment
-def assess_quality(image_path, prompt):
-    # Your implementation here
-    reward_score = model.get_reward(image_path, prompt)
-    return reward_score
-```
 
 ## Installation
 
@@ -189,20 +173,6 @@ The model is evaluated on three key IQA tasks:
 
 Once trained, OmniQuality-R can be used as an interpretable reward function for text-to-image generation models without retraining:
 
-### Using Pre-trained Model from Hugging Face
-
-```python
-from transformers import AutoModel, AutoTokenizer
-
-# Load pre-trained OmniQuality-R model
-model_name = "yeeeeeyy/OmniQuality-R"
-model = AutoModel.from_pretrained(model_name, torch_dtype="auto")
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-# Evaluate image quality
-reward_score = model.get_reward(image_path, prompt)
-print(f"Quality Score: {reward_score}")
-```
 
 ### Using Local Trained Model
 
