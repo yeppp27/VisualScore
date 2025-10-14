@@ -5,6 +5,8 @@
 
 <hr>
 
+[![🤗 HF Model](https://img.shields.io/badge/🤗-Model-blue)](https://huggingface.co/yeeeeeyy/OmniQuality-R) [![📄 Paper](https://img.shields.io/badge/📄-Paper-green)](https://arxiv.org/abs/2024.xxxxx) [![🌐 GitHub](https://img.shields.io/badge/🌐-GitHub-purple)](https://github.com/yeppp27/OmniQuality-R)
+
 ## Abstract
 
 Current visual evaluation approaches are typically constrained to a single task — focusing either on technical quality for low-level distortions, aesthetic quality for subjective visual appeal, or text-image alignment for semantic consistency. With the growing role of reward models in guiding generative systems, there is a need to extend into an all-encompassing quality assessment form that integrates multiple tasks. To address this, we propose **OmniQuality-R**, a unified reward modeling framework that transforms multi-task quality reasoning into continuous and interpretable reward signals for policy optimization.
@@ -21,6 +23,33 @@ To enable this, we construct a reasoning-enhanced reward modeling dataset by sam
 - **Stability Mechanisms**: STD filtering and entropy gating for robust training
 - **Interpretable Rewards**: Continuous and explainable reward signals for policy optimization
 - **No Retraining Required**: Can guide text-to-image generation models at test time
+
+## Model Checkpoints
+
+We provide pre-trained OmniQuality-R models on Hugging Face:
+
+### 🤗 Hugging Face Models
+
+| Model | Size | Description | Download |
+|-------|------|-------------|----------|
+| **OmniQuality-R** | 8.29B | Pre-trained OmniQuality-R model with Qwen2.5-VL backbone | [![🤗 HF](https://img.shields.io/badge/🤗-Download-blue)](https://huggingface.co/yeeeeeyy/OmniQuality-R) |
+
+### Quick Model Loading
+
+```python
+from transformers import AutoModel, AutoTokenizer
+
+# Load the pre-trained OmniQuality-R model
+model_name = "yeeeeeyy/OmniQuality-R"
+model = AutoModel.from_pretrained(model_name, torch_dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+# Use as reward function for quality assessment
+def assess_quality(image_path, prompt):
+    # Your implementation here
+    reward_score = model.get_reward(image_path, prompt)
+    return reward_score
+```
 
 ## Installation
 
@@ -160,8 +189,24 @@ The model is evaluated on three key IQA tasks:
 
 Once trained, OmniQuality-R can be used as an interpretable reward function for text-to-image generation models without retraining:
 
-```python
+### Using Pre-trained Model from Hugging Face
 
+```python
+from transformers import AutoModel, AutoTokenizer
+
+# Load pre-trained OmniQuality-R model
+model_name = "yeeeeeyy/OmniQuality-R"
+model = AutoModel.from_pretrained(model_name, torch_dtype="auto")
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+# Evaluate image quality
+reward_score = model.get_reward(image_path, prompt)
+print(f"Quality Score: {reward_score}")
+```
+
+### Using Local Trained Model
+
+```python
 import os
 import glob
 import re
