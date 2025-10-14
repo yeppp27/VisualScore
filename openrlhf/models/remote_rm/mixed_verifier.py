@@ -38,13 +38,13 @@ def strip_sequence(text, pad_token, eos_token):
 class RewardModelProxy:
     def __init__(self, args):
         self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            "/mnt/petrelfs/luyiting/ckt/Qwen2.5-VL-7B-Instruct/Qwen2.5-VL-7B-Instruct/",
+            "Qwen/Qwen2.5-VL-7B-Instruct/",
             device_map="auto",
             torch_dtype=torch.bfloat16
         )
         
         self.processor = Qwen2_5_VLProcessor.from_pretrained(
-            "/mnt/petrelfs/luyiting/ckt/Qwen2.5-VL-7B-Instruct/Qwen2.5-VL-7B-Instruct/",
+            "Qwen/Qwen2.5-VL-7B-Instruct/",
             min_pixels=256 * 28 * 28,
             max_pixels=4900 * 28 * 28
         )
