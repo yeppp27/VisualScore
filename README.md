@@ -1,4 +1,4 @@
-# VisualScore: Advancing Reward Models through All-Encompassing Quality Assessment
+# VisualScore: Learning Holistic Visual Quality Scores via Multi-Task Reasoning
 
 
 
@@ -7,13 +7,7 @@
 
 [![🤗 HF Model](https://img.shields.io/badge/🤗-Model-blue)](https://huggingface.co/yeeeeeyy/VisualScore) [![📄 Paper](https://img.shields.io/badge/📄-Paper-green)](https://arxiv.org/pdf/2510.10609) [![🌐 GitHub](https://img.shields.io/badge/🌐-GitHub-purple)](https://github.com/yeppp27/VisualScore)
 
-## Abstract
 
-Current visual evaluation approaches are typically constrained to a single task — focusing either on technical quality for low-level distortions, aesthetic quality for subjective visual appeal, or text-image alignment for semantic consistency. With the growing role of reward models in guiding generative systems, there is a need to extend into an all-encompassing quality assessment form that integrates multiple tasks. To address this, we propose **VisualScore**, a unified reward modeling framework that transforms multi-task quality reasoning into continuous and interpretable reward signals for policy optimization.
-
-Inspired by subjective experiments, where participants are given task-specific instructions outlining distinct assessment principles prior to evaluation, we propose VisualScore, a structured reward modeling framework that transforms multi-dimensional reasoning into continuous and interpretable reward signals.
-
-To enable this, we construct a reasoning-enhanced reward modeling dataset by sampling informative plan-reason trajectories via rejection sampling, forming a reliable chain-of-thought (CoT) dataset for supervised fine-tuning (SFT). Building on this, we apply Group Relative Policy Optimization (GRPO) for post-training, using a Gaussian-based reward to support continuous score prediction. To further stabilize the training and improve downstream generalization, we incorporate standard deviation (STD) filtering and entropy gating mechanisms during reinforcement learning. These techniques suppress unstable updates and reduce variance in policy optimization. We evaluate VisualScore on three key IQA tasks: aesthetic quality assessment, technical quality evaluation, and text-image alignment. Experiments show VisualScore improves robustness, explainability, and generalization, and can guide text-to-image generation models at test time without retraining by serving as an interpretable reward function.
 
 ## Key Features
 
