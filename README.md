@@ -1,19 +1,19 @@
-# OmniQuality-R: Advancing Reward Models through All-Encompassing Quality Assessment
+# VisualScore: Advancing Reward Models through All-Encompassing Quality Assessment
 
 
 
 
 <hr>
 
-[![🤗 HF Model](https://img.shields.io/badge/🤗-Model-blue)](https://huggingface.co/yeeeeeyy/OmniQuality-R) [![📄 Paper](https://img.shields.io/badge/📄-Paper-green)](https://arxiv.org/pdf/2510.10609) [![🌐 GitHub](https://img.shields.io/badge/🌐-GitHub-purple)](https://github.com/yeppp27/OmniQuality-R)
+[![🤗 HF Model](https://img.shields.io/badge/🤗-Model-blue)](https://huggingface.co/yeeeeeyy/VisualScore) [![📄 Paper](https://img.shields.io/badge/📄-Paper-green)](https://arxiv.org/pdf/2510.10609) [![🌐 GitHub](https://img.shields.io/badge/🌐-GitHub-purple)](https://github.com/yeppp27/VisualScore)
 
 ## Abstract
 
-Current visual evaluation approaches are typically constrained to a single task — focusing either on technical quality for low-level distortions, aesthetic quality for subjective visual appeal, or text-image alignment for semantic consistency. With the growing role of reward models in guiding generative systems, there is a need to extend into an all-encompassing quality assessment form that integrates multiple tasks. To address this, we propose **OmniQuality-R**, a unified reward modeling framework that transforms multi-task quality reasoning into continuous and interpretable reward signals for policy optimization.
+Current visual evaluation approaches are typically constrained to a single task — focusing either on technical quality for low-level distortions, aesthetic quality for subjective visual appeal, or text-image alignment for semantic consistency. With the growing role of reward models in guiding generative systems, there is a need to extend into an all-encompassing quality assessment form that integrates multiple tasks. To address this, we propose **VisualScore**, a unified reward modeling framework that transforms multi-task quality reasoning into continuous and interpretable reward signals for policy optimization.
 
-Inspired by subjective experiments, where participants are given task-specific instructions outlining distinct assessment principles prior to evaluation, we propose OmniQuality-R, a structured reward modeling framework that transforms multi-dimensional reasoning into continuous and interpretable reward signals.
+Inspired by subjective experiments, where participants are given task-specific instructions outlining distinct assessment principles prior to evaluation, we propose VisualScore, a structured reward modeling framework that transforms multi-dimensional reasoning into continuous and interpretable reward signals.
 
-To enable this, we construct a reasoning-enhanced reward modeling dataset by sampling informative plan-reason trajectories via rejection sampling, forming a reliable chain-of-thought (CoT) dataset for supervised fine-tuning (SFT). Building on this, we apply Group Relative Policy Optimization (GRPO) for post-training, using a Gaussian-based reward to support continuous score prediction. To further stabilize the training and improve downstream generalization, we incorporate standard deviation (STD) filtering and entropy gating mechanisms during reinforcement learning. These techniques suppress unstable updates and reduce variance in policy optimization. We evaluate OmniQuality-R on three key IQA tasks: aesthetic quality assessment, technical quality evaluation, and text-image alignment. Experiments show OmniQuality-R improves robustness, explainability, and generalization, and can guide text-to-image generation models at test time without retraining by serving as an interpretable reward function.
+To enable this, we construct a reasoning-enhanced reward modeling dataset by sampling informative plan-reason trajectories via rejection sampling, forming a reliable chain-of-thought (CoT) dataset for supervised fine-tuning (SFT). Building on this, we apply Group Relative Policy Optimization (GRPO) for post-training, using a Gaussian-based reward to support continuous score prediction. To further stabilize the training and improve downstream generalization, we incorporate standard deviation (STD) filtering and entropy gating mechanisms during reinforcement learning. These techniques suppress unstable updates and reduce variance in policy optimization. We evaluate VisualScore on three key IQA tasks: aesthetic quality assessment, technical quality evaluation, and text-image alignment. Experiments show VisualScore improves robustness, explainability, and generalization, and can guide text-to-image generation models at test time without retraining by serving as an interpretable reward function.
 
 ## Key Features
 
@@ -23,13 +23,13 @@ To enable this, we construct a reasoning-enhanced reward modeling dataset by sam
 
 ## Model Checkpoints
 
-We provide pre-trained OmniQuality-R models on Hugging Face:
+We provide pre-trained VisualScore models on Hugging Face:
 
 ### 🤗 Hugging Face Models
 
 | Model | Size | Description | Download |
 |-------|------|-------------|----------|
-| **OmniQuality-R** | 8.29B | Pre-trained OmniQuality-R model with Qwen2.5-VL backbone | [![🤗 HF](https://img.shields.io/badge/🤗-Download-blue)](https://huggingface.co/yeeeeeyy/OmniQuality-R) |
+| **VisualScore** | 8.29B | Pre-trained VisualScore model with Qwen2.5-VL backbone | [![🤗 HF](https://img.shields.io/badge/🤗-Download-blue)](https://huggingface.co/yeeeeeyy/VisualScore) |
 
 
 ## Installation
@@ -48,8 +48,8 @@ conda create --name omniquality python=3.10
 conda activate omniquality
 
 # Clone repository
-git clone https://github.com/yeppp27/OmniQuality-R.git
-cd OmniQuality-R
+git clone https://github.com/yeppp27/VisualScore.git
+cd VisualScore
 
 # Install dependencies
 pip install -e .[vllm]
@@ -64,7 +64,7 @@ pip install -r requirements.txt
 
 ### Three-Stage Training Pipeline
 
-OmniQuality-R follows a three-stage training approach:
+VisualScore follows a three-stage training approach:
 
 #### Stage 1: Chain-of-Thought (CoT) Dataset Construction
 Build reasoning-enhanced reward modeling dataset through rejection sampling to create informative plan-reason trajectories.
@@ -100,12 +100,12 @@ python -m openrlhf.cli.train_sft \
 
 **Stage 3a: Initial RL Training**
 ```bash
-bash ./examples/scripts/omniquality-R/train_grpo_ava_evalmuse_koniq_7B_RLstage1.sh
+bash ./examples/scripts/VisualScore/train_grpo_ava_evalmuse_koniq_7B_RLstage1.sh
 ```
 
 **Stage 3b: Advanced RL Training with Stability Mechanisms**
 ```bash
-bash ./examples/scripts/omniquality-R/train_grpo_ava_evalmuse_koniq_7B_RLstage2.sh
+bash ./examples/scripts/VisualScore/train_grpo_ava_evalmuse_koniq_7B_RLstage2.sh
 ```
 
 ### Configuration
@@ -168,7 +168,7 @@ The model is evaluated on three key IQA tasks:
 
 ## Usage as Reward Function
 
-Once trained, OmniQuality-R can be used as an interpretable reward function for text-to-image generation models without retraining:
+Once trained, VisualScore can be used as an interpretable reward function for text-to-image generation models without retraining:
 
 
 ### Using Local Trained Model
@@ -322,11 +322,11 @@ class QualityRater:
 
 ## Citation
 
-If you find OmniQuality-R useful for your research, please cite:
+If you find VisualScore useful for your research, please cite:
 
 ```bibtex
 @article{omniquality2024,
-  title={OmniQuality-R: Advancing Reward Models through All-Encompassing Quality Assessment},
+  title={VisualScore: Advancing Reward Models through All-Encompassing Quality Assessment},
   author={[Authors]},
   year={2025}
 }
